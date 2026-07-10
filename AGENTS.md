@@ -31,3 +31,8 @@ research_brain 디렉토리는 각종 논문의 내용을 정리하거나 ideati
 - 사용자가 md 파일을 최신화하라고 하면 a.md 파일의 기존 내용에 사용자가 새롭게 질문하고 답변을 얻은 내용을 바탕으로 정보를 추가하거나 수정할 것.
 	- 사용자가 가장 최근 정리하라고 요청하거나 최신화하라고 요청한 시점 (즉, md 파일이 가장 마지막으로 업데이트된 시점) 이후로 사용자가 추가로 질문한 내용에 한해서 최신화할 것.
 - Markdown 문서의 수식은 `$...$` 또는 `$$...$$` 형식으로 작성하고, `\(...\)` 형식은 사용하지 말 것. 수식은 코드블록으로 쓰지 말고 LaTeX math로 렌더링되도록 작성할 것.
+
+### Github Repository 관련 지침
+- research_brain 폴더는 github에 연결된 Repository이다. 링크는 다음과 같다
+  https://github.com/BluebackFrog/research_brain.git
+- 파일 또는 폴더가 수정될만한 작업을 하기 전에 pull 을 하는 등 동기화하고, 작업이 끝난 후에는 commit 및 push를 진행한다.ㄴ
