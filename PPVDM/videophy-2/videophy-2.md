@@ -64,3 +64,11 @@
 - **일반 video quality와의 분리**: PC는 aesthetics와 상관계수 0.09, motion quality와 0.002에 불과. 보기 좋고 움직임이 많은 영상만 최적화해서는 물리 상식을 얻지 못함.
 - **강한 모델의 failure mode**: Wan2.2도 회전하는 yo-yo가 크게 변형되거나 줄이 사라지고, 묶인 풍선이 외력에 의해 부자연스럽게 수축하는 등 재질·인과·보존 법칙을 위반.
 - **평가 설계의 의미**: PC 평가에서 prompt를 숨기고, 영상에 grounding된 rule과 전체적 PC를 병렬로 수집해 “prompt를 틀렸지만 물리는 맞는 영상”과 “prompt는 맞지만 물리는 틀린 영상”을 구분함.
+
+# VideoPhy 대비 개선점
+
+- **범위·규모**: 재질 간 상호작용 중심의 688 caption에서 실제 행동 중심의 3,940 prompt로 확장; 여러 사건이 이어지는 긴 dense caption까지 평가.
+- **어려운 사례 선정**: 사람이 simulation 복잡도로 easy/hard를 정하던 방식에서, CogVideoX-5B가 joint score 0을 보인 행동 60개를 고른 model-based hard split으로 변경.
+- **더 엄밀한 사람 평가**: SA·PC를 binary 대신 1--5로 세밀하게 평가하고, PC 평가는 prompt를 숨겨 semantic mismatch가 물리 판단을 오염시키지 않게 함.
+- **법칙별 오류 추적**: 생성 영상에서 규칙을 추출한 뒤 followed / violated / CBD와 추가 위반을 수집. 따라서 영상은 그럴듯해도 질량·운동량 보존처럼 어떤 법칙에서 실패했는지 분석 가능.
+- **자동 평가 확장**: SA·PC binary 판정기에서 SA·PC 점수화와 physical-rule 3-class 분류를 함께 학습하는 multitask evaluator로 확장.
