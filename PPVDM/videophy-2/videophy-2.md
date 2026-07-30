@@ -12,14 +12,14 @@
 
 ## 1. 데이터셋 구성
 
-![평가 파이프라인](attachments/videophy-2-pipeline.png)
+![평가 파이프라인](videophy-2-pipeline.png)
 
 - **Seed action 선정**
 	- Kinetics, UCF-101, SSv2에서 수집한 600개 이상의 행동을 두 독립 검토자가 물리 상식 평가에 적합한지 판정하고, 둘 다 선택한 232개를 Gemini-2.0-Flash-Exp로 의미 중복 제거.
 	- 최종 197개 행동: object interaction 143개, physical activity/sports 54개. 타이핑처럼 운동·상호작용이 약한 행동은 제외.
 - **복합 사건 prompt 생성**
-	- Gemini-2.0-Flash-Exp가 행동당 20개씩, 총 3,940개 prompt를 생성. 단일 동작보다 `당기기 → 발사 → 과녁에 맞기`처럼 여러 사건이 이어지는 묘사를 유도.
-	- Mistral-NeMo-12B-Instruct로 의미는 유지한 dense caption도 생성; 원 prompt 평균 16 token을 평균 138 token으로 확장해 긴 조건문 이해도도 시험.
+	- Gemini-2.0-Flash-Exp가 행동당 20개씩, 총 3,940개 prompt를 생성. ~={cyan}단일 동작보다 `당기기 → 발사 → 과녁에 맞기`처럼 여러 사건이 이어지는 묘사를 유도.=~
+	- Mistral-NeMo-12B-Instruct로 의미는 유지한 dense caption도 생성; 원 prompt 평균 16 token을 평균 138 token으로 확장해 ~={cyan}긴 조건문 이해도도 시험=~.
 - **Video-grounded physical rule 생성**
 	- 먼저 각 prompt로 비디오를 생성하고, Gemini-2.0-Flash-Exp가 그 **생성 비디오를 captioning**한 뒤 해당 영상에서 성립해야 할 candidate rule 3개와 대응 법칙을 생성.
 	- 물리 규칙을 원 prompt에서 곧바로 만들지 않는 이유: 모델이 prompt를 어겼어도 영상 자체는 물리적으로 그럴듯할 수 있기 때문. 즉 rule의 근거를 조건문이 아니라 실제 영상 내용에 둠.

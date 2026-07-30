@@ -1,3 +1,4 @@
+- [[VideoPhy-2]]
 - 한 줄 정리
 	- 물리 상호작용 caption 688개로 T2V 모델의 물리 상식 능력을 측정하고, 사람의 SA/PC 판단을 모사하도록 VideoCon을 fine-tuning한 자동 평가기까지 제공하는 benchmark
 
@@ -8,7 +9,7 @@
 
 - Main Method
 	- 핵심 Figure
-		- ![사람 평가에서의 모델별 VideoPhy 정확도](attachments/figure_1_model_performance.png)
+		- ![사람 평가에서의 모델별 VideoPhy 정확도](figure_1_model_performance.png)
 		- caption 의미를 지키면서 물리적으로도 맞는 경우의 비율은 최고 CogVideoX-5B도 $39.6\%$에 그친다. 단순 시각 품질과 물리 상식은 별개로 평가해야 함을 보여준다.
 
 	- 1. 물리 상식 caption benchmark 구축

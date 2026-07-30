@@ -91,3 +91,7 @@ noisy video latent x_t
 
 - Sampling step이 30번이면 DiT 전체 forward가 30번 수행되고, velocity도 30번 예측됨.
 - 비디오 frame들은 순차적으로 한 장씩 생성되는 것이 아니라, **전체 video latent의 모든 time/spatial token이 병렬적으로 함께 denoise**됨.
+
+
+### 추가 architecture
+[[Wan 2.2]] 참조

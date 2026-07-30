@@ -89,13 +89,3 @@ Mask-aware metric은 segmentation mask 또는 motion mask를 이용해 객체와
 | Segmentation 오류 | 모든 mask-aware metric | SAM2·SAM3 등이 객체를 놓치거나 다른 객체를 포함하면 metric 오차가 물리 오차로 해석됨 |
 | 그림자·조명·유체 변화 | Physics-IQ motion-mask metric | 단순 픽셀 변화 mask는 객체 운동과 그림자·반사·조명 변화를 구분하지 못함 |
 | Smoothness와 physics의 불일치 | VAMP Velocity / Acceleration Consistency | 일정하고 부드럽지만 물리적으로 틀린 운동이 높은 점수를 받을 수 있고, 충돌처럼 정당한 급격한 변화가 불리할 수 있음 |
-
-### 권장 조합
-
-| 평가 조건 | 권장 Metric 조합 | 이유 |
-| --- | --- | --- |
-| Paired GT physics video 존재 | Foreground Mask IoU + Background RMSE + Trajectory $L_2$ + Velocity/Acceleration RMSE + Mask Chamfer Distance | 객체·배경·궤적·운동학·형상을 분리해 진단 가능 |
-| GT 없이 객체/배경 안정성 평가 | CRONOS Object/Background Stability | Reference trajectory 없이 객체와 배경의 붕괴 탐지 가능 |
-| GT 없이 물리 법칙 평가 | Morpheus Dynamical Score + Physical Invariance Score | 특정 reference trajectory보다 운동방정식과 보존 법칙을 직접 평가 |
-| Trajectory-controlled generation | Mask IoU + centroid trajectory error | 목표 mask의 위치뿐 아니라 객체 실루엣과 이동 경로를 함께 평가 |
-| Video object removal | TokSim + BG-PSNR + FG-Flicker | 제거 성공, 배경 보존, 인페인팅 영역의 시간 안정성을 분리 평가 |

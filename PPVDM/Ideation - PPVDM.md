@@ -55,6 +55,7 @@ Papers: [[Paper List - PPVDM]]
    - point trajectory는 너무 복잡한데, 이걸 더 간략하게 만들 수는 없을까?
 	   - 물체의 ‘운동’은 생각보다 몇 종류 없을지도…
 	     ~={red}→ 운동의 분류에 대한 reference 찾아볼 것=~
+	       ~={cyan}: 이거 WISA에서 17가지 카테고리로 분류함=~
    - 간략하게 나타내기가 힘들다면… 그냥 Embedding 하나로 때우기?
      → point trajectory 에 정보가 충분한지 고민할 것
 2. point trajectory 나타내는 방법
@@ -75,6 +76,7 @@ Papers: [[Paper List - PPVDM]]
 	- ex1) 공을 굴린다 (roll) 라는 표현 → 공 하나가 나머지 공 두 개를 빙글빙글 돌아버림
 	- ex2) 왼쪽, 오른쪽 이런 방향에 대한 단어 → 기재한 방향대로 object들이 날뜀
 	- ex3) “The platform rotates clockwise and the wooden stick hits the first block as it rotates” → 이쑤시개가 아니라 검정색 platform이 돌아버림 ㅋㅋㅋㅋㅋ 근데 이렇게 이해하는게 말은 됨….
+	- ~={red}+ “text input 과 관련되지 않은 부분에서 physically corrupted 되는 경우를 못봤음”=~
 - ‘시간’을 이해 못하는 느낌. 거꾸로 동작을 수행하는 경우 꽤 많음
 → “물체 운동을 따라서 그림자를 정밀하게 만드는건 할 줄 아는데 공 하나를 사용자가 원하는 대로 못쏘는게 말이 되나?”
 ### 가설
@@ -84,3 +86,43 @@ Papers: [[Paper List - PPVDM]]
 ~={red}	- 예를 들어 경사면에 공이 있는 상태를 initial frame으로 두고 텍스트 인풋은 안넣은 상태로 영상을 생성해본다면? 잘 만들까?=~
 - LVLM한테만 텍스트 인풋을 넣고 VDM은 LVLM이 주는 visual info만을 바탕으로 생성한다면, (이 때 LVLM의 감독 하에 video를 조금씩 여러 개 생성해서 하나의 큰 비디오를 만드는 식으로 한다면) 더 잘하지 않을까?
 	- LVLM이 planner + critic, VDM이 action policy
+
+
+
+포괄하는 텍스트 + chunk 단위 텍스트 두 개 사용하는 연구 있음
+
+LVLM을 VDM에 아예 통합시키는 연구
+
+텍스트 안쓰는 벤치마크 찾아보기
++ I2V 연구 중에서 텍스트 안넣는 연구도 있음
+
+
+
+## 0728
+
+- Interaction을 어떻게 정의해야 할까?
+- GT-Generated 간의 event graph 비교에 대한 생각들…
+	- GT video 라고 해서 모든 가능한 interaction을 담고 있는 것이 아님.
+	  ![[Pasted image 20260728143322.png]]
+		→ A = GT, B = Generated 일 때, “non-deterministic”함을 나타내는 $B - A$ 에 대해서 어떻게 reward를 줄 수 있는가? 결국 world knowledge가 필요하지 않나?
+		→ $B-A$ 비율이 많지 않을 것으로 기대하고 그냥 무시하면 되려나? GT event graph의 내용이 사용되는 경우만 시그널이 들어가도록?
+- Event graph를 써먹는 구체적인 방법?
+	- ex) 공이랑 rubber ducky 랑 부딪치는 상황 → “rubber ducky는 잘 안밀려난다”는 knowledge가 event graph에 저장됨. 어디로 공이 튀든 간에 잘 안밀리게 생성하기만 하면 physically plausible.
+	- 문제점 1: knowledge를 어떻게 뽑을 것인가?
+		- rule-based (현재): event 는 구분할 수 있어도 이걸로부터 general한 팩트를 담기가 어려울 것 같음
+		- LVLM??
+	- 문제점 2: knowledge를 어떤 형태로 저장할 것인가?
+	- 문제점 3: 저장된 knowledge를 어떻게 reward 로 만들 것인가?
+- 핵심 IDEA: “현실적인 physical plausibility는 deterministic하지 않다”
+
+
+## 0730
+
+I2V 관련 쓸만해보이는 insights
+- MotiF: VDM이 학습할 때는 배경만 똑같이 만들어도 loss가 많이 줄어든다.
+- AlignVid: 이미지를 블러처리하면 이미지 조건이 약해지고 텍스트에 어텐션이 비교적 더 많이 걸려져서 객체 수준 지시를 더 잘 따른다. (ex. 없는 object 만들라고 하는 지시를 더 잘 따름)
+- Focal Guidance: 텍스트 조건을 잘 따르지 않는 semantic-weak layers 가 존재한다.
+
+I2V object 관련 벤치마크
+- UI2V-Bench: object를 정확히 찾아서 모션을 부여해야 하는 벤치마크
+- Omit2V: 객체 수준 지시를 평가 (텍스트 프롬프트를 얼마나 잘 따르는가)

@@ -1,9 +1,6 @@
 https://github.com/Wan-Video/Wan2.2
 
-![[Pasted image 20260720150044.png]]
-![[Pasted image 20260720150101.png]]
-![[Pasted image 20260720150113.png]]
-
+![[Pasted image 20260720151023.png]]
 ## 한 줄 정리
 
 - Wan2.1을 기반으로, denoising **step**별 두 expert를 교체하는 MoE와 고압축 VAE를 도입해 품질과 효율을 함께 높인 모델.

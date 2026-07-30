@@ -23,7 +23,7 @@
 
 ## 1. 계산 기반 Metric
 
-### PMF (Physical Motion Fidelity) — PhysInOne
+### ~={cyan}PMF (Physical Motion Fidelity) — PhysInOne=~
 
 - 목적: 생성 영상과 물리 simulator reference 영상의 **motion dynamics가 얼마나 유사한지** 측정한다.
 - 계산:
@@ -97,7 +97,7 @@ $$
 
 - 목적: rigid object가 생성 과정에서 찌그러지거나 다른 형태로 morphing되는 현상을 측정한다.
 - 계산:
-	1. SAM3D로 프레임별 객체 mesh $M_i^t$를 복원한다.
+	1. ~={cyan}SAM3D로 프레임별 객체 mesh $M_i^t$를 복원한다.=~
 	2. scale과 rotation을 첫 프레임 mesh에 정렬한다.
 	3. 첫 프레임과 이후 프레임 mesh 사이 Chamfer distance의 robust maximum을 계산한다.
 	4. 거리를 exponential decay로 변환하여 0–1 score로 만든다.
@@ -111,11 +111,11 @@ $$
 
 - 해석: 높을수록 객체의 3D shape이 안정적이다.
 
-### Motion Similarity — CRONOS
+### ~={cyan}Motion Similarity — CRONOS=~
 
 - 목적: 생성 영상의 움직임이 simulator reference의 움직임과 유사한지 측정한다.
 - 계산:
-	1. 생성 영상과 reference 영상을 appearance-invariant motion encoder인 DisMo에 입력한다.
+	1. ~={cyan}생성 영상과 reference 영상을 appearance-invariant motion encoder인 DisMo에 입력한다.=~
 	2. 대응 시점 motion embedding의 cosine similarity를 계산한다.
 	3. 시간축에서 robust minimum을 취한다.
 

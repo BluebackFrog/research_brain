@@ -22,7 +22,7 @@
 		- local pathway는 짧은 물리 변화에 집중하고, 기존 global text pathway는 장면 전체의 장거리 의미를 유지한다. 전체 모델은 flow-matching loss로 학습됨.
 
 	- 3. 학습 방식
-		- WISA-80k에서 5초보다 긴 video를 832$\times$480, 16 fps clip으로 잘라 약 53k sample을 만든다. 원래 WISA의 전역 physics label은 clip과 시간적으로 어긋날 수 있어 쓰지 않고, 위 VLM annotation을 새로 생성한다.
+		- WISA-80k에서 5초보다 긴 video를 $832\times480$, 16 fps clip으로 잘라 약 53k sample을 만든다. 원래 WISA의 전역 physics label은 clip과 시간적으로 어긋날 수 있어 쓰지 않고, 위 VLM annotation을 새로 생성한다.
 		- 새 local block만 1,000 step 학습해 안정화한 뒤, base를 unfreeze해 2,000 step 전체 fine-tuning한다. 추가 module을 포함한 PhysVid는 1.7B parameter.
 
 	- 4. 추론: positive/negative local guidance

@@ -10,16 +10,16 @@
 
 ## 한눈에 보기
 
-| Dataset | 영상 출처 | GT/reference의 역할 | 규모 | 반영하는 핵심 physics |
-|---|---|---|---:|---|
-| PhysInOne | Synthetic / simulator | **직접 paired reference rollout** | 153,810개 3D scene, 약 200만 video | Mechanics, optics, fluid dynamics, magnetism의 71개 현상 |
-| CRONOS | Synthetic / Unreal Engine | **직접 paired reference rollout** | 675개 video | 낙하, 충돌, 가림 뒤 운동의 연속성 |
-| IntPhys 2 | Synthetic / Unreal Engine | 가능·불가능 GT가 있는 violation-of-expectation video | 1,416개 video | Permanence, immutability, continuity, solidity |
-| PhysVid | Synthetic / Genesis + real-world | 탄성·점도·동마찰계수의 연속값 GT | 총 36,300개 video | 반발, 액체 퍼짐, 마찰 감속 |
-| DynSuperCLEVR | Synthetic / PyBullet + Blender | 완전한 4D 상태와 사건 GT | 1,200개 video | 3D 속도·가속도, 중력·마찰, 충돌 |
-| Physion++ | Synthetic / TDW | 숨은 물성값과 접촉 결과 GT | 총 9,536개 trial | 질량, 마찰, 탄성, 변형성 |
-| ComPhy | Synthetic / Bullet + Blender | target당 물성 추론용 reference video 4개 | 12,000개 set, 60,000개 clip | 질량·전하, 충돌·인력·척력 |
-| WISA-32K / WISA-80K | **Real-world Internet videos** | 물리 현상 학습용 unpaired reference corpus | 버전에 따라 32K 또는 약 80K clip | Dynamics, thermodynamics, optics의 17개 현상 |
+| Dataset             | 영상 출처                            | GT/reference의 역할                             |                              규모 | 반영하는 핵심 physics                                      |
+| ------------------- | -------------------------------- | -------------------------------------------- | ------------------------------: | ---------------------------------------------------- |
+| PhysInOne           | Synthetic / simulator            | **직접 paired reference rollout**              | 153,810개 3D scene, 약 200만 video | Mechanics, optics, fluid dynamics, magnetism의 71개 현상 |
+| CRONOS              | Synthetic / Unreal Engine        | **직접 paired reference rollout**              |                      675개 video | 낙하, 충돌, 가림 뒤 운동의 연속성                                 |
+| IntPhys 2           | Synthetic / Unreal Engine        | 가능·불가능 GT가 있는 violation-of-expectation video |                    1,416개 video | Permanence, immutability, continuity, solidity       |
+| PhysVid             | Synthetic / Genesis + real-world | 탄성·점도·동마찰계수의 연속값 GT                          |                 총 36,300개 video | 반발, 액체 퍼짐, 마찰 감속                                     |
+| DynSuperCLEVR       | Synthetic / PyBullet + Blender   | 완전한 4D 상태와 사건 GT                             |                    1,200개 video | 3D 속도·가속도, 중력·마찰, 충돌                                 |
+| Physion++           | Synthetic / TDW                  | 숨은 물성값과 접촉 결과 GT                             |                  총 9,536개 trial | 질량, 마찰, 탄성, 변형성                                      |
+| ComPhy              | Synthetic / Bullet + Blender     | target당 물성 추론용 reference video 4개            |       12,000개 set, 60,000개 clip | 질량·전하, 충돌·인력·척력                                      |
+| WISA-32K / WISA-80K | **Real-world Internet videos**   | 물리 현상 학습용 unpaired reference corpus          |        버전에 따라 32K 또는 약 80K clip | Dynamics, thermodynamics, optics의 17개 현상             |
 
 ---
 
