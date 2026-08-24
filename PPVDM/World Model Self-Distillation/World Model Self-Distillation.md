@@ -1,0 +1,84 @@
+- 원문: [World Model Self-Distillation.pdf](World%20Model%20Self-Distillation.pdf)
+
+- 한 줄 정리
+	- VLM이 만든 상세 실행 설명을 보는 video-flow Demonstrator의 동역학을 짧은 task만 보는 Executor에 on-policy distillation하고, VLM reward로 Executor를 더 최적화해 별도 task-video demonstration 없이 범용 task-solving world model을 만드는 방법.
+
+- motivation
+	- 도메인: instruction-conditioned video world model을 이용한 visual planning 및 general task solving.
+	- 문제: pretrained video generator는 상세 action description이 있어야 올바른 미래를 생성하므로, 짧은 task를 직접 해결하려면 외부 VLM reasoning이나 수집 비용이 큰 task-video pair가 필요함.
+	- 해결: self-distillation + VLM-feedback reinforcement learning.
+
+- Main Method
+	- 핵심 figure
+		- ![WMSD 전체 파이프라인](figures/Figure1_WMSD_overview.png)
+	- 입력과 출력
+		- 입력은 initial observation image $I$와 짧은 task instruction $T$이고, 출력은 task가 수행되는 latent video trajectory $\tau=\{x_t\}_{t\in[0,1]}$ 및 이를 decode한 video.
+		- $x_t\in\mathbb{R}^d$는 flow time $t$에서의 video latent이며, $x_0\sim\mathcal{N}(0,I)$에서 시작해 $x_1$의 video latent로 이동함.
+	- 1. Task-Solution pair 자동 생성
+		- unlabeled image $I$를 VLM에 넣어 짧은 task $T$와 이를 수행하는 상세 step-by-step description $D$를 생성함.
+		- $T$는 “cut the carrots”처럼 목표만 말하고, $D$는 누가 무엇을 잡고 어떤 순서로 움직이는지 video generator가 실행할 수 있을 정도로 자세히 기술함.
+		- 따라서 실제 성공 video 없이도 $(I,T,D)$ supervision을 대규모로 만들 수 있음.
+	- 2. Demonstrator-Executor 구성
+		- Demonstrator $v_{\theta'}(x_t,t\mid I,D)$는 initial image와 상세 solution을 조건으로 받는 고정 pretrained video-flow model.
+		- Executor $v_\theta(x_t,t\mid I,T)$는 같은 initial image와 짧은 task만 받고, 학습 가능한 task-solving model.
+		- 핵심은 Demonstrator의 최종 video 자체를 정답으로 고정하는 것이 아니라, 각 noisy latent state에서의 flow vector field를 Executor에 전달하는 것.
+	- 3. Off-policy와 On-policy self-distillation
+		- off-policy는 Demonstrator가 만든 trajectory 위에서 $\|v_\theta-v_{\theta'}\|_2^2$를 줄임. 안정적이지만 Executor가 실제로 방문하는 state를 보지 않아 rollout error가 누적될 수 있음.
+		- on-policy는 Executor가 만든 trajectory 위에서 teacher-student discrepancy를 계산함:
+			- $L_{\mathrm{on}}=\mathbb{E}_{\tau\sim p_\theta}\left[\int_0^1\|v_\theta(x_t,t\mid I,T)-v_{\theta'}(x_t,t\mid I,D)\|_2^2dt\right]$.
+		- 같은 base noise에서 Executor가 자기 trajectory 위의 teacher velocity를 잘 맞추면, terminal distribution의 $W_2$ distance도 작아진다는 bound를 제시함.
+	- 4. Distillation을 reward로 변환
+		- trajectory-level distillation reward는 다음과 같이 Demonstrator와 동역학이 가까운 Executor rollout을 선호함:
+			- $r_{\mathrm{distill}}(\tau)=-\int_0^1\|\operatorname{sg}[v_\theta(x_t,t\mid I,T)]-v_{\theta'}(x_t,t\mid I,D)\|_2^2dt$.
+		- Executor 쪽 flow에는 stop-gradient를 적용해 이 항이 direct regression이 아니라 “어떤 trajectory의 확률을 높일지”를 결정하는 policy reward로 작동하게 함.
+	- 5. VLM feedback으로 Demonstrator를 넘어가기
+		- Executor가 같은 task에 대해 여러 video를 rollout하면 VLM이 task completion 여부를 평가하고, `yes`와 `no`의 log-probability 차이를 task reward로 사용함.
+		- task reward만 최적화하면 물체가 갑자기 생기거나 사라지는 reward hacking이 발생하므로, visual quality·physical plausibility·temporal coherence를 판정하는 consistency reward도 함께 사용함.
+		- 기본 total reward는 $R(\tau)=\lambda_{\mathrm{task}}r_{\mathrm{task}}+\lambda_{\mathrm{distill}}r_{\mathrm{distill}}$이며, 실제 LTX-2 실험에는 consistency와 PickScore reward도 추가됨.
+		- 같은 task의 rollout group 안에서 reward를 정규화해 relative advantage를 만들고, flow-matching에 맞춘 AWM 또는 Flow-GRPO로 좋은 rollout의 확률을 높임.
+	- 6. Demonstrator anchor와 최종 objective
+		- reward는 좋은 trajectory를 선택하지만 vector field 자체를 직접 맞추지는 않으므로, sampled state를 detach한 anchor loss를 추가함:
+			- $L_{\mathrm{anchor}}=\mathbb{E}_{\tau\sim p_\theta}\left[\int_0^1\|v_\theta(\operatorname{sg}[x_t],t\mid I,T)-v_{\theta'}(\operatorname{sg}[x_t],t\mid I,D)\|_2^2dt\right]$.
+		- 최종 objective는 $L_{\mathrm{final}}=L_{\mathrm{RL}}+\beta_dL_{\mathrm{anchor}}$.
+		- task reward는 Demonstrator보다 task를 잘 푸는 trajectory로 이동하게 하고, distillation reward와 anchor는 pretrained visual dynamics에서 과도하게 벗어나지 않게 함.
+	- inference
+		- 학습이 끝나면 Executor만 사용하며, $I$와 $T$만으로 video를 생성함. VLM solution 생성이나 Demonstrator 호출이 필요 없어 base few-step model과 inference cost가 같음.
+
+- 데이터 및 실험 설정
+	- WorldTasks 학습 데이터
+		- video-game environment와 real-world scene에서 가져온 20,000개 image를 품질 및 agentic-potential 기준으로 filtering함.
+		- Qwen3.5-27B가 image마다 8개의 task-solution pair를 만들고, 최종적으로 146,440개 task prompt를 구성함.
+		- instruction은 `[행동 주체]: [task]` 형식이라 first-person camera, 사람, 차량 등 어떤 agent가 행동해야 하는지 명시함.
+	- 학습
+		- 주 실험은 8-step LTX-2 기반 LoRA와 AWM을 사용하고, 같은 task당 24개 rollout으로 relative advantage를 계산함.
+		- HunyuanVideo-1.5 + Flow-GRPO에서도 재현해 특정 base model이나 RL optimizer에 한정되지 않음을 확인함.
+
+- 실험
+	- WorldTasks-Bench
+		- task: 200개 initial image-task pair를 입력으로 주고, 모델이 지정된 agent가 task를 수행하는 future video를 생성해야 함.
+		- Task Score: VLM이 생성 video의 최종 상태에서 instruction이 완전히 수행됐다고 판정한 비율.
+		- Agent Score: 요구된 agent가 실제로 해당 action을 수행했다고 판정한 비율.
+		- Realism/Consistency Score: motion, contact, object interaction과 시간적 변화가 물리적으로 그럴듯하고 일관적이라고 판정한 비율.
+		- LTX-2 8-step에서 WMSD는 Task/Agent/Consistency/평균을 $0.285/0.391/0.694/0.455$에서 $0.605/0.691/0.882/0.726$으로 개선함.
+		- 상세 solution을 매번 VLM에 생성시키는 `+VLM` baseline의 평균 $0.598$도 넘었고, end-to-end inference time은 base와 같은 10.1초임.
+		- HunyuanVideo-1.5에서도 25 step 학습만으로 평균 점수가 $0.597\rightarrow0.673$으로 증가함.
+	- DreamGen Bench
+		- task: initial robot image와 manipulation instruction을 주고, GR1 robot이 해당 task를 수행하는 future video를 생성함.
+		- Object/Behavior/Environment subset은 각각 새로운 물체, 새로운 행동, 새로운 환경에 대한 robot-video generalization을 평가함.
+		- WMSD는 GR00T task-specific video로 SFT하지 않고도 Object/Behavior/Environment에서 $70.0/57.4/58.6$을 기록해 SFT된 Cosmos의 $62.0/61.7/65.5$와 경쟁력 있는 성능을 보임.
+	- 주요 결과 해석
+		- on-policy self-distillation + RL은 pure RL과 Demonstrator 모두를 넘어, 상세 solution의 execution knowledge를 짧은 instruction interface로 내재화함.
+		- 개선 폭은 navigation Task Score $31.1\%\rightarrow75.6\%$, object interaction $17.6\%\rightarrow55.9\%$에서 특히 큼.
+
+- Ablation 또는 Analysis
+	- on-policy vs. off-policy: off-policy는 약 60 training step 이후 포화되지만 on-policy는 계속 개선되며, distillation reward까지 포함한 full on-policy가 가장 좋음.
+	- RL 구성: pure RL은 약 50 step 이후 plateau에 도달하지만 on-policy self-distillation + RL은 계속 좋아져 Demonstrator를 넘어섬.
+	- anchor strength $\beta_d$: 약 $0.01$이 최적이며, 너무 작으면 teacher guidance가 약하고 너무 크면 anchor가 RL update를 막음.
+	- consistency reward: 제거하면 VLM을 속이기 위해 물체나 목표 구조가 갑자기 생성되는 reward hacking이 나타남.
+	- training quality: 낮은 resolution이나 적은 sampling step은 rollout 비용을 줄이지만 영상 판별이 모호해져 reward hacking 위험을 높임.
+	- distillation reward granularity: per-step과 trajectory-level reward의 최종 성능 차이는 작아 더 단순한 trajectory-level을 사용함.
+	- Demonstrator update: Executor와 weight를 공유하거나 Demonstrator를 함께 갱신하면 불안정해져, 주 실험은 고정 Demonstrator를 사용함.
+	- DMD 대안: distribution-matching self-distillation은 개념적으로 가능하지만 실험에서는 반복적으로 divergence해 최종 방법에서 제외함.
+	- OOD task: 긴 puzzle처럼 Demonstrator 자체가 coherent solution을 만들지 못하는 task에서는 WMSD의 개선 폭도 감소함.
+	- data-free 한계: robot-specific video 없이도 일반적인 task motion은 학습하지만, 특정 robot의 외형과 정밀한 dynamics는 복원할 수 없음.
+	- compute: 주 결과는 128 GH200 GPU, ablation은 16 GH200 GPU에서 12시간을 사용해 학습 비용이 매우 큼.
