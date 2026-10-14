@@ -1,7 +1,7 @@
 ## 분류 요약
 
-- **조사 기준일:** 2026-10-14. 기존 11편에 신규 4편을 추가했다.
-- **비교 범위:** 생성된 영상 또는 shot·segment를 평가한 뒤 다시 생성하는 추론 시 반복 개선. 생성 전 계획만 고치거나 단일 diffusion sampling 도중에만 개입하는 방법은 제외했다.
+- **조사 기준일:** 2026-10-14. 총 20편. 이번 추가 조사는 학회 채택을 우선해 본회의 4편과 워크숍 1편을 보강했다.
+- **비교 범위:** 영상·shot·segment를 생성한 뒤 피드백이나 생성 결과를 활용해 다시 생성하는 추론 시 반복 개선. prompt 수정뿐 아니라 NoisEasier의 reward 기반 noise 최적화와 FreeInit의 clean latent 기반 재초기화를 포함한다. 생성 전 계획 수정, 학습 데이터 구축, 단일 sampling 내부에서만 수행하는 보정·탐색은 별도 범위로 남겼다.
 - **연도 기준:** ‘최초 공개’는 arXiv v1 연도이며, 학회 발표 연도와 구분했다. ‘채택 미확인’은 확인한 1차 출처에서 채택 근거를 확보하지 못했다는 뜻이다.
 - **기호:** O = 사용, X = 사용하지 않음, △ = 선택적 지원 또는 비교 범위가 다른 이력, — = 원문에서 누적 입력 범위 미명시. 우리 방법은 구현 검증 결과가 아닌 설계안이다.
 
@@ -22,12 +22,17 @@
 | CoAgent | 2025 | 채택 미확인 | X | O | △ | △ |
 | A²RD · 기본형 | 2026 | 채택 미확인 | X | O | △ | △ |
 | VQQA | 2026 | 채택 미확인 | X | X | △ | X |
+| P-Flow | 2026 | CVPR 2026 | X | X | O | X |
+| CineCrew | 2026 | ECCV 2026 | X | O | O | △ |
+| NoisEasier | 2026 | ECCV 2026 | X | X | X | X |
+| FreeInit | 2023 | ECCV 2024 | X | X | X | X |
+| AIGVE-MACS refinement | 2025 | CVPR 2026 VGBE 워크숍 | X | X | — | — |
 | **우리 방법 · 설계안** | — | — | O | O | O | O |
 
 - **공간 국소 수정:** 생성된 영상의 특정 영역에 mask 등으로 수정 제어를 적용하는지. ROI 밖 픽셀이 정확히 고정된다는 뜻은 아니다. 입력 객체를 검출하거나 생성 layout을 지정하는 것만으로는 O로 보지 않는다.
-- **시간 선택 수정:** 실패한 프레임·shot·segment를 골라 다시 생성하는지. 평가 시 일부 프레임만 관찰하거나 I2V 입력 첫 프레임을 유지하는 것은 포함하지 않는다. SPIRAL·CoAgent·A²RD의 O는 segment·shot 단위이다.
+- **시간 선택 수정:** 실패한 프레임·shot·segment를 골라 다시 생성하는지. 평가 시 일부 프레임만 관찰하거나 I2V 입력 첫 프레임을 유지하는 것은 포함하지 않는다. SPIRAL·CoAgent·A²RD·CineCrew의 O는 segment·shot 단위이다.
 - **누적 이력:** 다음 수정에 여러 과거 결과·피드백을 참조하는지. 직전 결과 하나 또는 best-so-far 하나만 이어 쓰면 X이다. O도 모든 iteration의 모든 정보를 빠짐없이 입력한다는 뜻은 아니며, 실제 범위는 각 논문의 History 항목에 적었다.
-- **시각 이력:** 과거 생성 영상·프레임의 참조를 기준으로 한다. 다른 shot의 상태·시각 embedding이나 관련 사례 검색은 △로 구분한다. 최종 후보 선택을 위해 영상을 모아 두는 것과 다음 refinement에 다시 입력하는 것도 구분한다.
+- **시각 이력:** 과거 생성 영상·프레임의 참조를 기준으로 한다. 다른 shot의 상태·시각 embedding이나 관련 사례 검색은 △로 구분한다. 최종 후보 선택을 위해 영상을 모아 두는 것과 다음 refinement에 다시 입력하는 것도 구분한다. 갱신된 noise·latent·optimizer state가 이전 연산의 영향을 계승하는 것만으로 누적 시각 이력 O로 보지 않는다.
 
 ## 핵심 4편
 
@@ -66,6 +71,53 @@
 - **History:** 현재 영상·QA·직전 선택 결과를 사용하며, 전체 수정 이력의 누적 입력 범위는 미명시이다.
 - **비교 포인트:** 영상 점수가 0이면 전체 재생성, 1이면 중단하는 분기가 이미 있다. 우리 방법과는 **프레임별 ROI 타당성 검증으로 region/whole-frame을 선택한다**는 판단 기준을 비교해야 한다.
 - **근거:** [§2.1–2.3, Appendix E.1](https://aclanthology.org/2026.findings-acl.1817.pdf). 전역 재생성·중단 분기는 §2.1.
+
+## 추가 확인한 학회 발표 논문 5편
+
+### P-Flow
+
+- **발표:** 최초 공개 **2026** → **CVPR 2026 본회의**. *P-Flow: Prompting Visual Effects Generation*. [arXiv 이력](https://arxiv.org/abs/2603.22091), [공식 proceedings](https://openaccess.thecvf.com/content/CVPR2026/html/Zhao_P-Flow_Prompting_Visual_Effects_Generation_CVPR_2026_paper.html).
+- **핵심 방법:** reference 영상의 폭발·변형 같은 시각 효과와 현재 생성 결과를 VLM이 비교 → 효과를 설명하는 prompt 수정 → reference에서 얻은 시간적 noise prior와 random noise를 혼합해 다시 생성.
+- **공간·시간 범위:** 영상 전체를 재생성한다. 효과 관련 단어만 고치는 것은 해당 객체의 spatial ROI만 수정하는 기능이 아니다.
+- **History:** **모든 과거 prompt·VLM 분석은 누적**하므로 텍스트 O. 직접 보는 영상은 reference·직전 결과·현재 결과로 제한되어, 다회 시각 archive 입력은 X이다.
+- **비교 포인트:** 텍스트와 시각 history의 보존 범위를 명시적으로 나눈 직접 비교군이다. 우리 설계는 ROI가 표시된 과거 프레임을 어떻게 선택·활용하는지, 그 이력이 수정 범위 결정에 어떤 역할을 하는지 대비할 수 있다.
+- **근거:** [§3.3–3.5, Appendix A.1 Algorithm 1](https://arxiv.org/html/2603.22091v1), [공식 supplement](https://openaccess.thecvf.com/content/CVPR2026/supplemental/Zhao_P-Flow_Prompting_Visual_CVPR_2026_supplemental.pdf).
+
+### CineCrew
+
+- **발표:** 최초 공개 **2026** → **ECCV 2026 본회의**. *Better Call CineCrew: Consistent Ultra-Long Narrative-to-Film Generation*. [arXiv 이력](https://arxiv.org/abs/2609.07720), [공식 proceedings](https://link.springer.com/chapter/10.1007/978-3-032-37023-5_19).
+- **핵심 방법:** 서사를 shot·asset·camera 제약으로 구조화 → keyframe과 clip 생성 → Reviewer가 실패 원인을 진단 → 제약·keyframe prompt·video prompt를 수정해 해당 clip 재생성.
+- **공간·시간 범위:** 실패 clip을 재시도하고 통과한 clip을 모아 장편 영상을 구성한다. 공간 X, 시간 O이며 clip 내부의 개별 프레임 freeze는 아니다.
+- **History:** Production Rulebook에 실패 tag·확정 prompt·실행 피드백을 누적하고 역할에 맞는 제약을 가져오므로 텍스트 O. 시각 △는 asset·accepted keyframe·continuity anchor의 재사용이며, 모든 실패 영상의 누적 관찰을 뜻하지 않는다.
+- **비교 포인트:** 성공 구간 유지와 누적 memory를 함께 다루는 학회 채택 비교군이다. 우리 방법의 프레임 단위 accept/freeze 및 ROI 검증과 판단 단위를 구분해야 한다.
+- **근거:** [§3.3–3.4, Algorithm 1](https://arxiv.org/html/2609.07720v1), [공식 구현의 Production loop 설명](https://github.com/Ironieser/CineCrew).
+
+### NoisEasier
+
+- **발표:** 최초 공개 **2026** → **ECCV 2026 본회의**. *NoisEasier: Test-Time Noise Optimization for Text-to-Video Generation*. [arXiv 이력](https://arxiv.org/abs/2608.30194), [공식 proceedings](https://link.springer.com/chapter/10.1007/978-3-032-37098-3_3).
+- **핵심 방법:** 짧은 sampling으로 영상 생성 → 정합성·시각 품질·motion reward 계산 → gradient로 초기 noise와 sampling 단계의 stochastic noise를 갱신 → 수정된 noise로 영상 재생성.
+- **공간·시간 범위:** 매번 영상 전체를 생성한다. 평가에 일부 프레임·clip·optical flow를 쓰더라도 ROI나 성공 프레임을 선택해 고정하는 기능은 아니다.
+- **History:** 현재 생성 결과의 reward로 noise를 갱신하며, 과거 prompt·critique·영상 archive를 누적 재입력하지 않는다. optimizer state와 noise의 계승은 표의 누적 history와 구분한다.
+- **비교 포인트:** 모델 가중치와 생성 prompt를 유지하면서 **샘플별 noise 변수**를 최적화한다. prompt를 통한 언어적 수정과 reward gradient를 통한 수치적 수정의 직접 대비가 가능하다.
+- **근거:** [§3.1 Eq. 4, §3.3 Eq. 7, Fig. 2](https://arxiv.org/html/2608.30194v1).
+
+### FreeInit
+
+- **발표:** 최초 공개 **2023** → **ECCV 2024 본회의**. *FreeInit: Bridging Initialization Gap in Video Diffusion Models*. [arXiv 이력](https://arxiv.org/abs/2312.07537), [공식 proceedings](https://link.springer.com/chapter/10.1007/978-3-031-72646-0_22).
+- **핵심 방법:** 전체 DDIM sampling으로 clean video latent 생성 → 다시 noise 추가 → 시공간 저주파 성분은 유지하고 고주파는 새 random noise로 교체 → 이 noise에서 전체 sampling을 반복.
+- **공간·시간 범위:** 모든 공간·시간 위치를 다시 생성한다. 3D Fourier filter의 mask는 **주파수 선택**이며 pixel ROI나 특정 프레임 선택이 아니다.
+- **History:** 직전 생성 latent의 구조를 다음 초기 noise에 전달한다. 과거 여러 수정본을 명시적으로 보관·재입력하는 텍스트·시각 history는 없다.
+- **비교 포인트:** 외부 critic 없이 생성 결과의 저주파 구조를 재사용하는 반복 개선이다. prompt는 고정하며, VLM이 오류를 진단하고 수정 범위를 선택하는 방법과 구분한다.
+- **근거:** [§4, Eq. 8–11, Fig. 7, §5.1](https://arxiv.org/html/2312.07537v2). 통상적인 한 번의 denoising 내부 반복과 달리, clean latent를 만든 뒤 sampling을 다시 시작한다.
+
+### AIGVE-MACS의 refinement 실험
+
+- **발표:** 최초 공개 **2025** → **CVPR 2026 VGBE 워크숍**. *AIGVE-MACS: Unified Multi-Aspect Commenting and Scoring Model for AI-Generated Video Evaluation*. 본회의와 구분한다. [arXiv 이력](https://arxiv.org/abs/2507.01255), [공식 workshop proceedings](https://openaccess.thecvf.com/content/CVPR2026W/VGBE/html/Liu_AIGVE-MACS_Unified_Multi-Aspect_Commenting_and_Scoring_Model_for_AI-Generated_Video_CVPRW_2026_paper.html).
+- **핵심 방법:** 평가 VLM이 생성 영상에 대해 여러 측면의 score·comment 출력 → GPT-4.1 Instruction Revisor가 prompt 수정 → HunyuanVideo로 재생성·재평가.
+- **공간·시간 범위:** 영상 전체를 다시 생성한다. 평가기의 dynamic frame sampling은 관찰 전략이며, 선택된 프레임만 수정하는 방법은 아니다.
+- **History:** 현재 instruction·영상의 평가 피드백을 사용하는 것은 명시되지만, 여러 과거 피드백·영상을 누적 입력하는 범위는 미명시이다.
+- **비교 포인트:** 주 기여는 평가 모델이고, 반복 생성은 적용 실험이다. PQSG처럼 평가기의 세밀한 진단이 실제 refinement에 어떻게 쓰이는지를 비교할 수 있다.
+- **근거:** [arXiv §6, Fig. 5](https://arxiv.org/html/2507.01255v1#S6).
 
 ## 함께 비교할 기존 7편
 
@@ -132,7 +184,7 @@
 - **비교 포인트:** 시간 선택 수정·시각 이력의 중요한 선행 연구. 동일 clip의 수정본 비교 및 ROI 타당성 판단과 대비해야 한다. 별도의 agent/generator 학습도 다룬다.
 - **근거:** [§3.1–3.5, Appendix B.1/B.3/B.4, F.2](https://arxiv.org/html/2603.08403v3).
 
-## 이번에 추가한 4편
+## 앞서 추가한 4편
 
 ### MotionAgent · rethinking 옵션
 
@@ -176,7 +228,7 @@
 - **공간·시간 범위:** 잘된 프레임은 통과·freeze. 실패 프레임은 ROI가 적절하면 region만, 부적절하면 해당 프레임 전체에 refined prompt를 적용.
 - **History:** 같은 clip의 prompt와 ROI 표시 영상 이력을 함께 사용한다는 설계. 모든 iteration을 넣을지, 대표 이력만 선택할지는 명시해야 한다.
 - **비교 포인트:** **두 iteration 기반 ROI + 동일 clip의 시각적 수정 이력 + 프레임별 accept/freeze + ROI 검증에 따른 수정 범위 전환**의 결합.
-- **선행 연구와의 관계:** RAPO++·NEWTON은 누적 텍스트 이력, VQQA는 선택적 텍스트 history, SPIRAL·CoAgent·A²RD는 segment·shot 선택 수정이나 장면 간 기억을 사용한다. history나 시간 선택 자체만으로 차별점을 주장하기는 어렵다.
+- **선행 연구와의 관계:** RAPO++·NEWTON·P-Flow는 누적 텍스트 이력, VQQA는 선택적 텍스트 history, SPIRAL·CoAgent·A²RD·CineCrew는 segment·shot 선택 수정이나 장면 간 기억을 사용한다. 특히 P-Flow는 누적 텍스트와 최근 두 생성 영상의 비교를, CineCrew는 실패 clip 재시도와 Rulebook 누적을 결합한다. history나 시간 선택 자체만으로 차별점을 주장하기는 어렵다.
 - **구체화할 사항:** freeze가 픽셀·latent·noise 중 무엇을 고정하는지 정의해야 한다. 두 영상 간 변화가 실제 오류 위치와 항상 같지는 않으므로 ROI 제안과 타당성 검증을 분리해야 한다.
 
 ## 추가로 둘 만한 축
@@ -187,6 +239,9 @@
 - **성공한 결과의 보존 방식 — 우선 추천**
 	- **구분:** noise·prompt로 보존 유도 / 성공 shot·segment 재사용 / 프레임·latent의 명시적 freeze.
 	- **비교 효과:** 공간·시간 선택 여부만으로 드러나지 않는 보존 강도를 구분한다.
+- **반복이 이루어지는 단계 — 우선 추천**
+	- **구분:** 완성 영상의 피드백 기반 재생성 / 생성 결과를 이용한 초기 noise 재최적화 / sampling 내부 latent 보정·후보 탐색 / 학습용 데이터 구축.
+	- **비교 효과:** 모두 iterative refinement라고 불려도 수정하는 상태와 반복 시점이 다르다. 현재 표는 앞의 두 범위를 중심으로 비교한다.
 - **수정 대상**
 	- **구분:** prompt / layout·guidance / 궤적·카메라 / noise·latent / 기존 video / boundary image.
 	- **비교 효과:** VideoTPO, GenMAC, MotionAgent, VideoAgent, A²RD의 실제 개입 지점을 비교한다.
