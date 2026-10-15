@@ -1,6 +1,6 @@
 ## 분류 요약
 
-- **조사 기준일:** 2026-10-14. 총 20편. 이번 추가 조사는 학회 채택을 우선해 본회의 4편과 워크숍 1편을 보강했다.
+- **조사 기준일:** 2026-10-14. 총 20편.
 - **시드·초기 noise 추가 확인일:** 2026-10-15. 동일 사례의 refinement 반복 사이를 비교하며, 논문별 근거는 아래 **시드·초기 noise** 항목에 표시했다.
 - **Reference video 추가 확인일:** 2026-10-15. 아래 표는 현재 생성 목표를 위한 외부 참조 영상 사용 여부를 기준으로 한다.
 - **비교 범위:** 영상·shot·segment를 생성한 뒤 피드백이나 생성 결과를 활용해 다시 생성하는 추론 시 반복 개선. prompt 수정뿐 아니라 NoisEasier의 reward 기반 noise 최적화와 FreeInit의 clean latent 기반 재초기화를 포함한다. 생성 전 계획 수정, 학습 데이터 구축, 단일 sampling 내부에서만 수행하는 보정·탐색은 별도 범위로 남겼다.
@@ -11,24 +11,24 @@
 |---|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
 | **PhyT2V** | 2024 | CVPR 2025 | X | X | — | — | X | X | X |
 | **VideoTPO / TiViBench** | 2025 | CVPR 2026 | X | X | X | X | X | X | X |
-| **RAPO++** | 2025 | 채택 미확인 | X | X | O | — | X | X | X |
 | **VideoRepair** | 2024 | Findings of ACL 2026 | O | X | — | — | △ | O | X |
 | GenMAC | 2024 | AAAI 2026 | X | X | X | X | X | X | X |
 | VISTA | 2025 | CVPR 2026 | X | X | X | X | — | — | X |
 | PQSG refinement | 2026 | ECCV 2026 | X | X | — | — | — | — | X |
-| NEWTON | 2026 | 채택 미확인 | X | X | O | X | — | — | X |
-| VideoAgent | 2024 | RLBRew @ RLC 2025 워크숍 | X | X | X | X | X | O | X |
-| Bootstrapping Physics-Grounded… | 2025 | ICCV 2025 워크숍 챌린지 보고 | X | X | — | — | — | — | O |
-| SPIRAL | 2026 | 채택 미확인 | X | O | △ | △ | — | — | X |
 | MotionAgent · rethinking | 2025 | ICCV 2025 | X | X | — | — | X | X | X |
-| CoAgent | 2025 | 채택 미확인 | X | O | △ | △ | — | — | X |
-| A²RD · 기본형 | 2026 | 채택 미확인 | X | O | △ | △ | — | — | X |
-| VQQA | 2026 | 채택 미확인 | X | X | △ | X | O | O | X |
 | P-Flow | 2026 | CVPR 2026 | X | X | O | X | — | O | O |
 | CineCrew | 2026 | ECCV 2026 | X | O | O | △ | △ | — | X |
 | NoisEasier | 2026 | ECCV 2026 | X | X | X | X | — | O | X |
 | FreeInit | 2023 | ECCV 2024 | X | X | X | X | X | O | X |
+| VideoAgent | 2024 | RLBRew @ RLC 2025 워크숍 | X | X | X | X | X | O | X |
+| Bootstrapping Physics-Grounded… | 2025 | ICCV 2025 워크숍 챌린지 보고 | X | X | — | — | — | — | O |
 | AIGVE-MACS refinement | 2025 | CVPR 2026 VGBE 워크숍 | X | X | — | — | — | — | X |
+| **RAPO++** | 2025 | 채택 미확인 | X | X | O | — | X | X | X |
+| NEWTON | 2026 | 채택 미확인 | X | X | O | X | — | — | X |
+| SPIRAL | 2026 | 채택 미확인 | X | O | △ | △ | — | — | X |
+| CoAgent | 2025 | 채택 미확인 | X | O | △ | △ | — | — | X |
+| A²RD · 기본형 | 2026 | 채택 미확인 | X | O | △ | △ | — | — | X |
+| VQQA | 2026 | 채택 미확인 | X | X | △ | X | O | O | X |
 | **우리 방법 · 설계안** | — | — | O | O | O | O | — | — | X |
 
 - **공간 국소 수정:** 생성된 영상의 특정 영역에 mask 등으로 수정 제어를 적용하는지. ROI 밖 픽셀이 정확히 고정된다는 뜻은 아니다. 입력 객체를 검출하거나 생성 layout을 지정하는 것만으로는 O로 보지 않는다.
@@ -42,7 +42,7 @@
 - **Reference video 사용:** 추론 시 **현재 생성 목표의 내용·동작·시간적 조건을 지정하는 외부 영상·clip**을 입력하거나 비교 기준으로 쓰는지. 목표 효과를 보여 주는 예시 영상과 continuation의 입력 prefix를 모두 포함하되, 역할은 논문별로 구분했다.
 - **Reference에서 제외하는 것:** 현재 수정 대상·과거에 자체 생성한 영상은 생성 결과/history, 단일 I2V 이미지·keyframe은 이미지 조건으로 구분한다. 학습용 영상, 평가에만 쓰는 정답 영상, VLM에 판정 방법을 알려 주는 고정 few-shot 예시는 이 축의 reference video로 세지 않는다.
 
-## 핵심 4편
+## 본회의·Findings 채택
 
 ### PhyT2V
 
@@ -66,17 +66,6 @@
 - **비교 포인트:** 두 후보의 비교를 prompt 최적화에 쓰지만, 두 iteration의 영상 차이로 수정 ROI를 계산하는 방식은 아니다.
 - **근거:** [§4, Eq. 1–3, Appendix D.1](https://arxiv.org/abs/2511.13704v2), [공식 Wan 구현](https://github.com/EnVision-Research/TiViBench/blob/cc5ee077e77821ae6fc4b8e1e085ebb7ce3a38a8/VideoTPO/videotpo_wan.py#L278-L345).
 
-### RAPO++
-
-- **발표:** 최초 공개 **2025**. **학회 채택 미확인**. 원래 RAPO의 CVPR 2025와 구분한다. [arXiv 이력](https://arxiv.org/abs/2510.20206), [공식 저장소](https://github.com/Vchitect/RAPO).
-- **핵심 방법:** 검색·문장 정리로 초기 prompt를 구성 → SSPO 단계에서 영상의 불일치·점수·선택적 optical-flow 피드백으로 반복 수정 → 수집한 prompt pair로 rewriter 학습.
-- **Reference video:** X. SSPO는 자체 생성 영상과 평가 피드백으로 prompt를 수정한다. retrieval은 caption 기반 표현을 보완하며, 외부 reference clip을 생성 목표로 사용하지 않는다. [§III–IV](https://arxiv.org/html/2510.20206v2#S4).
-- **공간·시간 범위:** prompt를 고친 뒤 영상 전체를 재생성한다. ROI나 성공 프레임 선택 보존은 없다.
-- **시드·초기 noise:** 시드 X / 초기 noise X(공식 Stage2 SSPO Wan2.1 구현 기준). 각 round에서 기본 seed 1423으로 Generator를 새로 초기화하고 같은 shape의 noise에서 생성한다. 논문 자체에는 round별 seed/noise 정책이 미명시이다. [생성 함수](https://github.com/Vchitect/RAPO/blob/c7c2cb9b3e3f5fa073d05528232ed0e28d1a7912/examples/Stage2_SSPO/phyaware_wan2.1.py#L96-L118), [반복 호출](https://github.com/Vchitect/RAPO/blob/c7c2cb9b3e3f5fa073d05528232ed0e28d1a7912/examples/Stage2_SSPO/phyaware_wan2.1.py#L304-L344).
-- **History:** Feedback Memory가 이전 optimized prompt와 평가·수정 결과를 참조하므로 누적 텍스트 O. 과거 영상 프레임까지 누적 재입력하는 범위는 미명시이다.
-- **비교 포인트:** history 사용 자체의 선행 연구. 우리 방법은 ROI가 표시된 시각 이력과 프레임별 수정 결정을 어떻게 연결하는지 구체화해야 한다.
-- **근거:** [§4.1, Table 4, §4.2](https://arxiv.org/abs/2510.20206v2). 표는 논문의 전체 설계 기준이다.
-
 ### VideoRepair
 
 - **발표:** 최초 공개 **2024** → **Findings of ACL 2026**. 최종 제목은 *Self-Correcting Text-to-Video Generation with Misalignment Detection and Localized Refinement*. [arXiv 이력](https://arxiv.org/abs/2411.15115), [공식 proceedings](https://aclanthology.org/2026.findings-acl.1817/).
@@ -88,7 +77,49 @@
 - **비교 포인트:** 영상 점수가 0이면 전체 재생성, 1이면 중단하는 분기가 이미 있다. 우리 방법과는 **프레임별 ROI 타당성 검증으로 region/whole-frame을 선택한다**는 판단 기준을 비교해야 한다.
 - **근거:** [§2.1–2.3, Appendix E.1](https://aclanthology.org/2026.findings-acl.1817.pdf). 전역 재생성·중단 분기는 §2.1.
 
-## 추가 확인한 학회 발표 논문 5편
+### GenMAC
+
+- **발표:** 최초 공개 **2024** → **AAAI 2026**. [arXiv 이력](https://arxiv.org/abs/2412.04440), [공식 proceedings](https://ojs.aaai.org/index.php/AAAI/article/view/37418).
+- **핵심 방법:** prompt를 프레임별 객체 box로 설계 → 영상 생성 → 검증·제안·수정·구조화 agent가 prompt·layout·guidance를 다시 설계.
+- **Reference video:** X. 텍스트에서 구성한 layout·prompt·guidance로 영상을 생성하고 검증하며, 외부 reference video는 사용하지 않는다. [§3.1–3.3](https://arxiv.org/html/2412.04440v1#S3.SS1).
+- **공간·시간 범위:** 객체 box로 생성을 유도하지만 기존 영상의 ROI나 성공 프레임을 보존하는 수정은 아니다. 전체 재생성으로 분류한다.
+- **시드·초기 noise:** 시드 X / 초기 noise X(공식 기본 단일-prompt demo 한정). 매 round 새 생성 프로세스에 동일 seed 12345678을 전달해 RNG를 재설정하고 같은 시작 noise를 재현한다. 여러 prompt를 batch로 처리하면 앞선 사례의 skip·종료로 RNG 소비 순서가 달라질 수 있어 일반화하지 않는다. [launcher](https://github.com/Karine-Huang/GenMAC/blob/8aee92a2ac30d63e876fc36867d83b1d27a208a3/scripts/run_t2v.py#L36-L74), [seed 초기화](https://github.com/Karine-Huang/GenMAC/blob/8aee92a2ac30d63e876fc36867d83b1d27a208a3/scripts/evaluation/inference_pipeline_iter.py#L560-L570), [시작 noise 생성](https://github.com/Karine-Huang/GenMAC/blob/8aee92a2ac30d63e876fc36867d83b1d27a208a3/lvdm/models/samplers/ddim.py#L130-L138).
+- **History:** 현재 영상과 직전 iteration의 구조화된 설계를 사용하며, 모든 과거 수정본을 누적 입력하는 방식은 아니다.
+- **비교 포인트:** 수정 대상이 prompt뿐 아니라 layout·guidance까지 확장된다. 생성 위치 제어와 기존 결과의 국소 수정을 구분하는 데 유용하다.
+- **근거:** [§3.1–3.3, Appendix A Eq. A3–A6](https://arxiv.org/html/2412.04440v1).
+
+### VISTA
+
+- **발표:** 최초 공개 **2025** → **CVPR 2026**. [arXiv 이력](https://arxiv.org/abs/2510.15831), [공식 proceedings](https://openaccess.thecvf.com/content/CVPR2026/html/Long_VISTA_A_Test-Time_Self-Improving_Video_Generation_Agent_CVPR_2026_paper.html).
+- **핵심 방법:** 여러 후보를 tournament로 비교해 champion 선택 → 시각·오디오·맥락 critique → prompt 개선 → 새 후보 생성·비교.
+- **Reference video:** X. 비교 대상은 자체 생성 후보와 이전 winner이며, 외부 목표 영상 없이 사용자 prompt와 평가 기준으로 개선한다. [§2 Algorithm 1](https://arxiv.org/html/2510.15831v1#S2).
+- **공간·시간 범위:** 영상 전체를 재생성하며, 공간 ROI나 특정 실패 프레임만 수정하지 않는다.
+- **시드·초기 noise:** 시드 — / 초기 noise —. Veo 후보 생성·선택과 prompt 수정은 설명하지만, refinement round 사이 seed나 시작 latent의 유지·변경 정책은 명시하지 않는다. [§2 Algorithm 1](https://arxiv.org/html/2510.15831v1).
+- **History:** 현재 champion·prompt·critique와 최선 후보의 유지가 핵심이다. 과거 여러 시도의 이력을 다음 수정에 누적 입력하는 방식은 아니다.
+- **비교 포인트:** best-so-far 후보 보관과 전체 수정 history 활용의 차이를 보여 준다.
+- **근거:** [§2.1–2.2, Algorithm 1](https://arxiv.org/html/2510.15831v1).
+
+### PQSG의 refinement 실험
+
+- **발표:** 최초 공개 **2026** → **ECCV 2026**. [arXiv 이력](https://arxiv.org/abs/2606.25306), [공식 proceedings](https://link.springer.com/chapter/10.1007/978-3-032-37035-8_17).
+- **핵심 방법:** 객체→행동→물리 질문 그래프로 오류 진단 → 질문별 피드백으로 GPT가 prompt 수정 → Wan으로 새 영상 생성·재평가.
+- **Reference video:** X(§5.5 기본 refinement 기준). 자체 생성 영상의 PQSG 피드백으로 prompt를 수정한다. reference video를 QG에 추가하는 실험은 별도 ablation이며 기본 refinement 입력과 구분한다. [§5.5–5.6, Appendix B Table 11](https://arxiv.org/html/2606.25306v1#S5.SS5).
+- **공간·시간 범위:** 질문별 진단을 mask나 프레임 선택으로 연결하지 않으므로 전체 재생성이다.
+- **시드·초기 noise:** 시드 — / 초기 noise —. 평가 피드백으로 prompt를 수정하고 Wan2.2로 재생성하지만, round별 seed·초기 noise 정책은 미명시이다. 공개 평가 코드나 별도의 재현 구현 설정으로 이를 대신 판정하지 않았다. [§5.5](https://arxiv.org/html/2606.25306v1#S5.SS5).
+- **History:** 누적 prompt·피드백·시각 입력의 범위는 미명시이다.
+- **비교 포인트:** 주목적은 평가이며, refinement는 §5.5의 응용 실험이다. 세밀한 오류 진단과 세밀한 수정 범위가 동일한 기능은 아니다.
+- **근거:** [§3, §5.5, Fig. 4](https://arxiv.org/html/2606.25306v1).
+
+### MotionAgent · rethinking 옵션
+
+- **발표:** 최초 공개 **2025** → **ICCV 2025**. [arXiv 이력](https://arxiv.org/abs/2502.03207), [공식 proceedings PDF](https://openaccess.thecvf.com/content/ICCV2025/papers/Liao_MotionAgent_Fine-grained_Controllable_Video_Generation_via_Motion_Field_Agent_ICCV_2025_paper.pdf).
+- **핵심 방법:** 입력 이미지의 객체를 Grounded-SAM으로 찾음 → 객체 궤적·카메라 움직임 계획 → optical flow로 변환해 I2V 생성 → **선택적 rethinking**에서 생성 영상과 이전 action을 검토하고 제어 조건 수정.
+- **Reference video:** X. 입력은 이미지와 motion text이며, rethinking에서 검토하는 영상은 직전 생성 결과이다. [§3.1.2–3.1.4](https://arxiv.org/html/2502.03207v2#S3.SS1).
+- **공간·시간 범위:** 전체 I2V를 다시 생성한다. SAM은 입력 객체의 grounding·운동 제어에 쓰이며, 기존 출력의 ROI만 보정하는 mask는 아니다.
+- **시드·초기 noise:** 시드 X / 초기 noise X(공식 rethinking demo 기준). 최초 생성과 rethinking 모두 생성 직전에 seed 42로 재설정하고 같은 shape의 시작 noise를 재현한다. 수정하는 것은 trajectory·camera 조건이다. [공통 생성 함수](https://github.com/leoisufa/MotionAgent/blob/60f408f7f533e05025ae78e463e1ff3fcc7bfabc/run_agent.py#L629-L652), [noise 생성](https://github.com/leoisufa/MotionAgent/blob/60f408f7f533e05025ae78e463e1ff3fcc7bfabc/pipeline/pipeline.py#L224-L255).
+- **History:** 이전 영상·action을 검토하지만, 여러 refinement 라운드의 모든 이력을 누적 입력하는 범위는 미명시이다.
+- **비교 포인트:** 피드백으로 고치는 대상이 prompt뿐 아니라 객체 궤적·카메라 제어이다. 반복 개선은 선택적 단계이므로 기본 생성 전체의 필수 절차로 해석하지 않는다.
+- **근거:** [§3.1.2, §3.1.4, §3.2, §4.3.4, Appendix 8](https://arxiv.org/html/2502.03207v2).
 
 ### P-Flow
 
@@ -134,62 +165,7 @@
 - **비교 포인트:** 외부 critic 없이 생성 결과의 저주파 구조를 재사용하는 반복 개선이다. prompt는 고정하며, VLM이 오류를 진단하고 수정 범위를 선택하는 방법과 구분한다.
 - **근거:** [§4, Eq. 8–11, Fig. 7, §5.1](https://arxiv.org/html/2312.07537v2). 통상적인 한 번의 denoising 내부 반복과 달리, clean latent를 만든 뒤 sampling을 다시 시작한다.
 
-### AIGVE-MACS의 refinement 실험
-
-- **발표:** 최초 공개 **2025** → **CVPR 2026 VGBE 워크숍**. *AIGVE-MACS: Unified Multi-Aspect Commenting and Scoring Model for AI-Generated Video Evaluation*. 본회의와 구분한다. [arXiv 이력](https://arxiv.org/abs/2507.01255), [공식 workshop proceedings](https://openaccess.thecvf.com/content/CVPR2026W/VGBE/html/Liu_AIGVE-MACS_Unified_Multi-Aspect_Commenting_and_Scoring_Model_for_AI-Generated_Video_CVPRW_2026_paper.html).
-- **핵심 방법:** 평가 VLM이 생성 영상에 대해 여러 측면의 score·comment 출력 → GPT-4.1 Instruction Revisor가 prompt 수정 → HunyuanVideo로 재생성·재평가.
-- **Reference video:** X. 현재 instruction과 자체 생성 영상의 score·comment로 개선하며, 별도의 외부 목표 영상은 사용하지 않는다. [§6 Fig. 5](https://arxiv.org/html/2507.01255v1#S6).
-- **공간·시간 범위:** 영상 전체를 다시 생성한다. 평가기의 dynamic frame sampling은 관찰 전략이며, 선택된 프레임만 수정하는 방법은 아니다.
-- **시드·초기 noise:** 시드 — / 초기 noise —. HunyuanVideo 재생성은 명시하지만, refinement 사이 seed 및 시작 noise의 재사용·재추출 방식은 명시하지 않는다. [§6](https://arxiv.org/html/2507.01255v1#S6).
-- **History:** 현재 instruction·영상의 평가 피드백을 사용하는 것은 명시되지만, 여러 과거 피드백·영상을 누적 입력하는 범위는 미명시이다.
-- **비교 포인트:** 주 기여는 평가 모델이고, 반복 생성은 적용 실험이다. PQSG처럼 평가기의 세밀한 진단이 실제 refinement에 어떻게 쓰이는지를 비교할 수 있다.
-- **근거:** [arXiv §6, Fig. 5](https://arxiv.org/html/2507.01255v1#S6).
-
-## 함께 비교할 기존 7편
-
-### GenMAC
-
-- **발표:** 최초 공개 **2024** → **AAAI 2026**. [arXiv 이력](https://arxiv.org/abs/2412.04440), [공식 proceedings](https://ojs.aaai.org/index.php/AAAI/article/view/37418).
-- **핵심 방법:** prompt를 프레임별 객체 box로 설계 → 영상 생성 → 검증·제안·수정·구조화 agent가 prompt·layout·guidance를 다시 설계.
-- **Reference video:** X. 텍스트에서 구성한 layout·prompt·guidance로 영상을 생성하고 검증하며, 외부 reference video는 사용하지 않는다. [§3.1–3.3](https://arxiv.org/html/2412.04440v1#S3.SS1).
-- **공간·시간 범위:** 객체 box로 생성을 유도하지만 기존 영상의 ROI나 성공 프레임을 보존하는 수정은 아니다. 전체 재생성으로 분류한다.
-- **시드·초기 noise:** 시드 X / 초기 noise X(공식 기본 단일-prompt demo 한정). 매 round 새 생성 프로세스에 동일 seed 12345678을 전달해 RNG를 재설정하고 같은 시작 noise를 재현한다. 여러 prompt를 batch로 처리하면 앞선 사례의 skip·종료로 RNG 소비 순서가 달라질 수 있어 일반화하지 않는다. [launcher](https://github.com/Karine-Huang/GenMAC/blob/8aee92a2ac30d63e876fc36867d83b1d27a208a3/scripts/run_t2v.py#L36-L74), [seed 초기화](https://github.com/Karine-Huang/GenMAC/blob/8aee92a2ac30d63e876fc36867d83b1d27a208a3/scripts/evaluation/inference_pipeline_iter.py#L560-L570), [시작 noise 생성](https://github.com/Karine-Huang/GenMAC/blob/8aee92a2ac30d63e876fc36867d83b1d27a208a3/lvdm/models/samplers/ddim.py#L130-L138).
-- **History:** 현재 영상과 직전 iteration의 구조화된 설계를 사용하며, 모든 과거 수정본을 누적 입력하는 방식은 아니다.
-- **비교 포인트:** 수정 대상이 prompt뿐 아니라 layout·guidance까지 확장된다. 생성 위치 제어와 기존 결과의 국소 수정을 구분하는 데 유용하다.
-- **근거:** [§3.1–3.3, Appendix A Eq. A3–A6](https://arxiv.org/html/2412.04440v1).
-
-### VISTA
-
-- **발표:** 최초 공개 **2025** → **CVPR 2026**. [arXiv 이력](https://arxiv.org/abs/2510.15831), [공식 proceedings](https://openaccess.thecvf.com/content/CVPR2026/html/Long_VISTA_A_Test-Time_Self-Improving_Video_Generation_Agent_CVPR_2026_paper.html).
-- **핵심 방법:** 여러 후보를 tournament로 비교해 champion 선택 → 시각·오디오·맥락 critique → prompt 개선 → 새 후보 생성·비교.
-- **Reference video:** X. 비교 대상은 자체 생성 후보와 이전 winner이며, 외부 목표 영상 없이 사용자 prompt와 평가 기준으로 개선한다. [§2 Algorithm 1](https://arxiv.org/html/2510.15831v1#S2).
-- **공간·시간 범위:** 영상 전체를 재생성하며, 공간 ROI나 특정 실패 프레임만 수정하지 않는다.
-- **시드·초기 noise:** 시드 — / 초기 noise —. Veo 후보 생성·선택과 prompt 수정은 설명하지만, refinement round 사이 seed나 시작 latent의 유지·변경 정책은 명시하지 않는다. [§2 Algorithm 1](https://arxiv.org/html/2510.15831v1).
-- **History:** 현재 champion·prompt·critique와 최선 후보의 유지가 핵심이다. 과거 여러 시도의 이력을 다음 수정에 누적 입력하는 방식은 아니다.
-- **비교 포인트:** best-so-far 후보 보관과 전체 수정 history 활용의 차이를 보여 준다.
-- **근거:** [§2.1–2.2, Algorithm 1](https://arxiv.org/html/2510.15831v1).
-
-### PQSG의 refinement 실험
-
-- **발표:** 최초 공개 **2026** → **ECCV 2026**. [arXiv 이력](https://arxiv.org/abs/2606.25306), [공식 proceedings](https://link.springer.com/chapter/10.1007/978-3-032-37035-8_17).
-- **핵심 방법:** 객체→행동→물리 질문 그래프로 오류 진단 → 질문별 피드백으로 GPT가 prompt 수정 → Wan으로 새 영상 생성·재평가.
-- **Reference video:** X(§5.5 기본 refinement 기준). 자체 생성 영상의 PQSG 피드백으로 prompt를 수정한다. reference video를 QG에 추가하는 실험은 별도 ablation이며 기본 refinement 입력과 구분한다. [§5.5–5.6, Appendix B Table 11](https://arxiv.org/html/2606.25306v1#S5.SS5).
-- **공간·시간 범위:** 질문별 진단을 mask나 프레임 선택으로 연결하지 않으므로 전체 재생성이다.
-- **시드·초기 noise:** 시드 — / 초기 noise —. 평가 피드백으로 prompt를 수정하고 Wan2.2로 재생성하지만, round별 seed·초기 noise 정책은 미명시이다. 공개 평가 코드나 별도의 재현 구현 설정으로 이를 대신 판정하지 않았다. [§5.5](https://arxiv.org/html/2606.25306v1#S5.SS5).
-- **History:** 누적 prompt·피드백·시각 입력의 범위는 미명시이다.
-- **비교 포인트:** 주목적은 평가이며, refinement는 §5.5의 응용 실험이다. 세밀한 오류 진단과 세밀한 수정 범위가 동일한 기능은 아니다.
-- **근거:** [§3, §5.5, Fig. 4](https://arxiv.org/html/2606.25306v1).
-
-### NEWTON
-
-- **발표:** 최초 공개 **2026**. **학회 채택 미확인**. [arXiv 이력](https://arxiv.org/abs/2605.18396), [공식 프로젝트](https://newton026.github.io/newton/).
-- **핵심 방법:** Planner가 물리 계산·keyframe 생성·prompt refinement 도구 선택 → Executor 실행 → Verifier가 의미·물리 점수 반환 → 여러 cycle 후 최고 점수 영상 선택.
-- **Reference video:** X. 입력 query를 바탕으로 prompt·keyframe·물리 계산 결과를 구성하며, 주요 pipeline에 외부 reference clip은 없다. keyframe은 생성한 이미지 조건이다. [§4.1.1–4.1.3](https://arxiv.org/html/2605.18396v2#S4.SS1).
-- **공간·시간 범위:** 생성 조건을 고쳐 영상 전체를 재생성한다. keyframe 생성은 기존 성공 프레임을 freeze하는 기능이 아니다.
-- **시드·초기 noise:** 시드 — / 초기 noise —. 재계획으로 prompt·keyframe 등의 조건을 바꾸지만, 논문의 생성기에서 round별 seed·초기 noise를 어떻게 관리하는지는 미명시이다. [§4.1.2, §5.1](https://arxiv.org/html/2605.18396v2).
-- **History:** reasoning·도구 입력/출력·점수를 누적하지만, **생성 비디오는 memory에서 명시적으로 제외**한다. 텍스트 O, 시각 X.
-- **비교 포인트:** Generator는 고정하고 Planner를 학습한다. 도구 실행 이력과 실제 생성 영상의 시각 이력을 구분할 수 있다.
-- **근거:** [§4.1.1–4.1.3, §4.2](https://arxiv.org/html/2605.18396v2).
+## 워크숍
 
 ### VideoAgent
 
@@ -213,6 +189,41 @@
 - **비교 포인트:** 영상 continuation이라는 설정 차이를 반영해 비교해야 한다. ICCV 본회의 채택 논문으로 표기하지 않는다.
 - **근거:** [§2, Step 1–3](https://arxiv.org/html/2511.20280v1).
 
+### AIGVE-MACS의 refinement 실험
+
+- **발표:** 최초 공개 **2025** → **CVPR 2026 VGBE 워크숍**. *AIGVE-MACS: Unified Multi-Aspect Commenting and Scoring Model for AI-Generated Video Evaluation*. 본회의와 구분한다. [arXiv 이력](https://arxiv.org/abs/2507.01255), [공식 workshop proceedings](https://openaccess.thecvf.com/content/CVPR2026W/VGBE/html/Liu_AIGVE-MACS_Unified_Multi-Aspect_Commenting_and_Scoring_Model_for_AI-Generated_Video_CVPRW_2026_paper.html).
+- **핵심 방법:** 평가 VLM이 생성 영상에 대해 여러 측면의 score·comment 출력 → GPT-4.1 Instruction Revisor가 prompt 수정 → HunyuanVideo로 재생성·재평가.
+- **Reference video:** X. 현재 instruction과 자체 생성 영상의 score·comment로 개선하며, 별도의 외부 목표 영상은 사용하지 않는다. [§6 Fig. 5](https://arxiv.org/html/2507.01255v1#S6).
+- **공간·시간 범위:** 영상 전체를 다시 생성한다. 평가기의 dynamic frame sampling은 관찰 전략이며, 선택된 프레임만 수정하는 방법은 아니다.
+- **시드·초기 noise:** 시드 — / 초기 noise —. HunyuanVideo 재생성은 명시하지만, refinement 사이 seed 및 시작 noise의 재사용·재추출 방식은 명시하지 않는다. [§6](https://arxiv.org/html/2507.01255v1#S6).
+- **History:** 현재 instruction·영상의 평가 피드백을 사용하는 것은 명시되지만, 여러 과거 피드백·영상을 누적 입력하는 범위는 미명시이다.
+- **비교 포인트:** 주 기여는 평가 모델이고, 반복 생성은 적용 실험이다. PQSG처럼 평가기의 세밀한 진단이 실제 refinement에 어떻게 쓰이는지를 비교할 수 있다.
+- **근거:** [arXiv §6, Fig. 5](https://arxiv.org/html/2507.01255v1#S6).
+
+## 채택 미확인
+
+### RAPO++
+
+- **발표:** 최초 공개 **2025**. **학회 채택 미확인**. 원래 RAPO의 CVPR 2025와 구분한다. [arXiv 이력](https://arxiv.org/abs/2510.20206), [공식 저장소](https://github.com/Vchitect/RAPO).
+- **핵심 방법:** 검색·문장 정리로 초기 prompt를 구성 → SSPO 단계에서 영상의 불일치·점수·선택적 optical-flow 피드백으로 반복 수정 → 수집한 prompt pair로 rewriter 학습.
+- **Reference video:** X. SSPO는 자체 생성 영상과 평가 피드백으로 prompt를 수정한다. retrieval은 caption 기반 표현을 보완하며, 외부 reference clip을 생성 목표로 사용하지 않는다. [§III–IV](https://arxiv.org/html/2510.20206v2#S4).
+- **공간·시간 범위:** prompt를 고친 뒤 영상 전체를 재생성한다. ROI나 성공 프레임 선택 보존은 없다.
+- **시드·초기 noise:** 시드 X / 초기 noise X(공식 Stage2 SSPO Wan2.1 구현 기준). 각 round에서 기본 seed 1423으로 Generator를 새로 초기화하고 같은 shape의 noise에서 생성한다. 논문 자체에는 round별 seed/noise 정책이 미명시이다. [생성 함수](https://github.com/Vchitect/RAPO/blob/c7c2cb9b3e3f5fa073d05528232ed0e28d1a7912/examples/Stage2_SSPO/phyaware_wan2.1.py#L96-L118), [반복 호출](https://github.com/Vchitect/RAPO/blob/c7c2cb9b3e3f5fa073d05528232ed0e28d1a7912/examples/Stage2_SSPO/phyaware_wan2.1.py#L304-L344).
+- **History:** Feedback Memory가 이전 optimized prompt와 평가·수정 결과를 참조하므로 누적 텍스트 O. 과거 영상 프레임까지 누적 재입력하는 범위는 미명시이다.
+- **비교 포인트:** history 사용 자체의 선행 연구. 우리 방법은 ROI가 표시된 시각 이력과 프레임별 수정 결정을 어떻게 연결하는지 구체화해야 한다.
+- **근거:** [§4.1, Table 4, §4.2](https://arxiv.org/abs/2510.20206v2). 표는 논문의 전체 설계 기준이다.
+
+### NEWTON
+
+- **발표:** 최초 공개 **2026**. **학회 채택 미확인**. [arXiv 이력](https://arxiv.org/abs/2605.18396), [공식 프로젝트](https://newton026.github.io/newton/).
+- **핵심 방법:** Planner가 물리 계산·keyframe 생성·prompt refinement 도구 선택 → Executor 실행 → Verifier가 의미·물리 점수 반환 → 여러 cycle 후 최고 점수 영상 선택.
+- **Reference video:** X. 입력 query를 바탕으로 prompt·keyframe·물리 계산 결과를 구성하며, 주요 pipeline에 외부 reference clip은 없다. keyframe은 생성한 이미지 조건이다. [§4.1.1–4.1.3](https://arxiv.org/html/2605.18396v2#S4.SS1).
+- **공간·시간 범위:** 생성 조건을 고쳐 영상 전체를 재생성한다. keyframe 생성은 기존 성공 프레임을 freeze하는 기능이 아니다.
+- **시드·초기 noise:** 시드 — / 초기 noise —. 재계획으로 prompt·keyframe 등의 조건을 바꾸지만, 논문의 생성기에서 round별 seed·초기 noise를 어떻게 관리하는지는 미명시이다. [§4.1.2, §5.1](https://arxiv.org/html/2605.18396v2).
+- **History:** reasoning·도구 입력/출력·점수를 누적하지만, **생성 비디오는 memory에서 명시적으로 제외**한다. 텍스트 O, 시각 X.
+- **비교 포인트:** Generator는 고정하고 Planner를 학습한다. 도구 실행 이력과 실제 생성 영상의 시각 이력을 구분할 수 있다.
+- **근거:** [§4.1.1–4.1.3, §4.2](https://arxiv.org/html/2605.18396v2).
+
 ### SPIRAL
 
 - **발표:** 최초 공개 **2026**. **학회 채택 미확인**. 현재 제목은 *SPIRAL: Self-Evolving Action-Conditioned Video Generation via Reflective Planning Agents*. [arXiv 이력](https://arxiv.org/abs/2603.08403), [공식 프로젝트](https://yuyang-cloud.github.io/spiral/).
@@ -223,19 +234,6 @@
 - **History:** Planner는 성공한 과거 segment의 시각·의미 이력과 실패 시도·진단을 사용한다. Critic은 현재 segment를 평가한다. 시간적으로 앞선 실행 이력이 중심이므로 두 history 축은 △.
 - **비교 포인트:** 시간 선택 수정·시각 이력의 중요한 선행 연구. 동일 clip의 수정본 비교 및 ROI 타당성 판단과 대비해야 한다. 별도의 agent/generator 학습도 다룬다.
 - **근거:** [§3.1–3.5, Appendix B.1/B.3/B.4, F.2](https://arxiv.org/html/2603.08403v3).
-
-## 앞서 추가한 4편
-
-### MotionAgent · rethinking 옵션
-
-- **발표:** 최초 공개 **2025** → **ICCV 2025**. [arXiv 이력](https://arxiv.org/abs/2502.03207), [공식 proceedings PDF](https://openaccess.thecvf.com/content/ICCV2025/papers/Liao_MotionAgent_Fine-grained_Controllable_Video_Generation_via_Motion_Field_Agent_ICCV_2025_paper.pdf).
-- **핵심 방법:** 입력 이미지의 객체를 Grounded-SAM으로 찾음 → 객체 궤적·카메라 움직임 계획 → optical flow로 변환해 I2V 생성 → **선택적 rethinking**에서 생성 영상과 이전 action을 검토하고 제어 조건 수정.
-- **Reference video:** X. 입력은 이미지와 motion text이며, rethinking에서 검토하는 영상은 직전 생성 결과이다. [§3.1.2–3.1.4](https://arxiv.org/html/2502.03207v2#S3.SS1).
-- **공간·시간 범위:** 전체 I2V를 다시 생성한다. SAM은 입력 객체의 grounding·운동 제어에 쓰이며, 기존 출력의 ROI만 보정하는 mask는 아니다.
-- **시드·초기 noise:** 시드 X / 초기 noise X(공식 rethinking demo 기준). 최초 생성과 rethinking 모두 생성 직전에 seed 42로 재설정하고 같은 shape의 시작 noise를 재현한다. 수정하는 것은 trajectory·camera 조건이다. [공통 생성 함수](https://github.com/leoisufa/MotionAgent/blob/60f408f7f533e05025ae78e463e1ff3fcc7bfabc/run_agent.py#L629-L652), [noise 생성](https://github.com/leoisufa/MotionAgent/blob/60f408f7f533e05025ae78e463e1ff3fcc7bfabc/pipeline/pipeline.py#L224-L255).
-- **History:** 이전 영상·action을 검토하지만, 여러 refinement 라운드의 모든 이력을 누적 입력하는 범위는 미명시이다.
-- **비교 포인트:** 피드백으로 고치는 대상이 prompt뿐 아니라 객체 궤적·카메라 제어이다. 반복 개선은 선택적 단계이므로 기본 생성 전체의 필수 절차로 해석하지 않는다.
-- **근거:** [§3.1.2, §3.1.4, §3.2, §4.3.4, Appendix 8](https://arxiv.org/html/2502.03207v2).
 
 ### CoAgent
 
