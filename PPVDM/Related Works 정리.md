@@ -1,3 +1,62 @@
+## 정독 우선순위
+
+- **선정 기준:** 우리 설계와의 직접 관련성 → 각 논문에서 배울 수 있는 서로 다른 수정 메커니즘 → 학회 채택 여부. 아래 순서는 성능 순위가 아니라 정독 추천 순서다.
+- **구성:** 전반적 iterative refinement 5편 + spatial local 수정 메커니즘 3편, 중복 없이 총 8편. **필수 4편은 PhyT2V·VideoTPO·RAPO++·VideoRepair**이며, VideoRepair는 local 그룹에 배치했다.
+- **전체 읽기 순서:** **VideoRepair → PhyT2V → VideoTPO → RAPO++ → P-Flow → Self-Refining Video Sampling → VideoGrain → GenMAC**. 처음 4편에서 직접 비교 기준을 잡고, 이후 history·noise·ROI 선택·region별 prompt 적용을 보완한다.
+
+### 전반적 iterative refinement · 5편
+
+| 그룹 내 우선순위 | 논문 | 최초 공개 / 발표처 | 정독 목적 |
+|:---:|---|---|---|
+| 1 | **[PhyT2V](https://arxiv.org/html/2412.00596v2#S3) · 필수** | 2024 / CVPR 2025 | 물리적 오류를 어떤 피드백으로 표현하고 다음 prompt에 반영하는지 파악한다. |
+| 2 | **[VideoTPO / TiViBench](https://arxiv.org/html/2511.13704v2#S4) · 필수** | 2025 / CVPR 2026 | 두 생성 후보의 비교를 textual loss·gradient와 prompt 갱신으로 연결하는 방식을 파악한다. |
+| 3 | **[RAPO++](https://arxiv.org/html/2510.20206v2#S4) · 필수** | 2025 / 학회·저널 채택 미확인 | SSPO의 다중 평가 피드백과 Feedback Memory가 다음 수정에 어떻게 쓰이는지 파악한다. |
+| 4 | **[P-Flow](https://arxiv.org/html/2603.22091v1#S3.SS3)** | 2026 / CVPR 2026 | 누적 텍스트 이력·최근 생성 영상 비교·초기 noise 변경의 관계를 파악한다. |
+| 5 | **[GenMAC](https://arxiv.org/html/2412.04440v1#S3)** | 2024 / AAAI 2026 | 오류 진단을 prompt뿐 아니라 frame별 layout·guidance 수정으로 연결하는 방식을 파악한다. |
+
+- **PhyT2V**
+	- **우선 읽을 부분:** §3.1–3.3, Fig. 6, Appendix B.2의 refinement 사례.
+	- **확인할 질문:** 영상이 caption으로 바뀌면서 어떤 정보가 남는가? 물리 규칙·불일치·평가 점수는 각각 어느 단계에 들어가며, 언제 수정을 중단하는가?
+- **VideoTPO / TiViBench**
+	- **우선 읽을 부분:** §4 Eq. 1–3, Appendix D.1과 공식 구현의 refinement loop. 벤치마크 전체보다 VideoTPO method를 먼저 읽는다.
+	- **확인할 질문:** 같은 round의 두 후보 비교에서 무엇을 개선 방향으로 뽑는가? 두 iteration 사이 변화로 ROI를 찾으려는 우리 설계와 비교 목적이 어떻게 다른가?
+- **RAPO++**
+	- **우선 읽을 부분:** §IV-A SSPO, Table IV의 history 입력 템플릿, §IV-B의 Stage 3와의 연결. Stage 1·3은 맥락을 잡은 뒤 읽는다.
+	- **확인할 질문:** history에 저장하는 항목과 실제 다음 LLM 입력에 넣는 항목은 무엇인가? 추론 시 반복 개선과 rewriter 학습용 pair 수집은 어떻게 구분되는가?
+- **P-Flow**
+	- **우선 읽을 부분:** §3.3–3.5, Appendix A.1 Algorithm 1과 VLM prompt.
+	- **확인할 질문:** 모든 텍스트 history를 유지하면서 시각 입력을 reference·직전·현재 영상으로 제한하는 이유는 무엇인가? reference noise prior와 새 random noise가 비교에 어떤 영향을 주는가?
+	- **설정 차이:** 외부 목표 효과 영상을 사용하는 방법이다. reference 없는 우리 설계와 입력 조건을 구분해서 읽는다.
+- **GenMAC**
+	- **우선 읽을 부분:** §3.1–3.3, Fig. 2–3, Appendix A, §4.4–4.5.
+	- **확인할 질문:** 오류 확인·수정 제안·수정 실행을 어떻게 나누고, 진단 결과에 따라 correction agent를 어떻게 선택하는가? 이는 우리 ROI 타당성 판단과 수정 범위 선택을 설계할 때 참고할 수 있다.
+	- **설정 차이:** frame별 box를 수정해도 기존 영상의 해당 ROI만 다시 만드는 것은 아니다. 전반적 refinement 그룹에 둔다.
+
+### Spatial local 수정 메커니즘 · 3편
+
+| 그룹 내 우선순위 | 논문 | 최초 공개 / 발표처 | 정독 목적 |
+|:---:|---|---|---|
+| 1 | **[VideoRepair](https://aclanthology.org/2026.findings-acl.1817/) · 필수** | 2024 / Findings of ACL 2026 | 오류 평가 → 보존 객체·mask 선택 → region별 noise·prompt 적용까지 연결된 직접 비교 대상. |
+| 2 | **[Self-Refining Video Sampling](https://proceedings.mlr.press/v306/jang26d.html)** | 2026 / ICML 2026 | 연속 clean latent 예측의 차이로 수정할 시공간 위치를 고르는 방식을 확인한다. |
+| 3 | **[VideoGrain](https://openreview.net/pdf?id=SSslAtcPB6)** | 2025 / ICLR 2025 | 여러 region의 prompt가 서로 간섭하지 않도록 attention과 latent를 제어하는 방식을 확인한다. |
+
+- **그룹의 범위:** 3편이 모두 완성 영상에 대한 자동 피드백 loop를 제시하는 것은 아니다. **VideoRepair는 생성 후 오류 보정**, **Self-Refining Video Sampling은 sampling 내부 보정**, **VideoGrain은 지정한 영역·prompt에 따른 영상 편집**이다. 후자의 두 편은 국소 수정 메커니즘을 배우기 위한 인접 연구로 선정했으며, 아래 20편 비교표에 동일한 종류의 outer-loop 방법으로 추가하지 않는다.
+- **VideoRepair — 전체 최우선**
+	- **우선 읽을 부분:** §2.1–2.3, Fig. 2, 초기 noise 구성과 region별 denoising을 설명하는 수식, 관련 ablation.
+	- **확인할 질문:** 왜 오류 영역을 직접 찾기보다 잘된 객체를 선택해 보존 mask를 만드는가? mask는 시간축으로 어떻게 적용되고, 보존 영역의 noise·latent·최종 픽셀 중 실제로 무엇이 유지되는가?
+	- **우리 방법과의 비교:** 객체 기반 mask와 iteration 차이 기반 ROI, ROI 타당성 재검증, frame별 accept/freeze의 차이를 먼저 정리한다.
+- **Self-Refining Video Sampling**
+	- **우선 읽을 부분:** §4.2–4.3, Eq. 10–11, Algorithm 1.
+	- **확인할 질문:** 같은 noise level에서 연속 clean 예측의 차이를 어떻게 uncertainty mask로 바꾸는가? mask 밖에서 재사용하는 상태는 무엇인가?
+	- **우리 방법과의 비교:** 차이 기반 ROI의 직접적인 참고 대상이다. 다만 비교하는 것은 완성 영상 V0·V1이 아니라 sampling 내부 clean latent 예측이며, 최종 영상의 성공 프레임을 영구 freeze하는 방법은 아니다. uncertainty가 높다는 사실이 실제 오류 위치의 정답을 뜻하지도 않는다.
+- **VideoGrain**
+	- **우선 읽을 부분:** §3.2–3.4의 space-time cross-attention·self-attention modulation, Appendix I Eq. 6–7의 latent blending.
+	- **확인할 질문:** region과 local prompt를 어떻게 연결하고, region 간 속성 누출을 어떻게 줄이는가? 원본 background latent는 어느 단계에 다시 넣는가?
+	- **우리 방법과의 비교:** “선택한 ROI에만 refined prompt를 적용”하는 실행 부분의 참고 대상이다. 오류 진단·ROI 타당성 판단·완성 영상의 반복 재평가를 자동화하는 방법으로 해석하지 않는다. SD1.5 기반 attention 제어가 Wan DiT에 그대로 적용된다고 가정하지 않는다.
+
+- **우선순위를 낮춘 이유:** CineCrew는 clip 제작·재시도, VISTA는 후보 선택과 critique, PQSG는 평가 방법이 중심이라 위 8편 다음에 읽는다. FreeInit·NoisEasier는 초기 noise를 바꾸는 원리까지 깊이 비교할 때 후속으로 읽는다.
+- **공통 정독 메모:** 각 논문에서 입력·출력, 평가기가 보는 정보, 반복 사이 넘기는 상태, 수정 mask의 의미, mask 밖 보존 방식, 종료 조건을 같은 형식으로 기록한다. 논문과 코드의 동작이 다르면 각각 근거를 구분한다.
+
 ## 분류 요약
 
 - **조사 기준일:** 2026-10-14. 총 20편.
