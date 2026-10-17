@@ -1,11 +1,11 @@
 ## 분류 요약
 
-- **조사 기준일:** 2026-10-14. 총 20편.
+- **조사 기준일:** 기존 비교군 2026-10-14, sampling·국소 편집 비교군 2026-10-17. 총 22편.
 - **시드·초기 noise 추가 확인일:** 2026-10-15. 동일 사례의 refinement 반복 사이를 비교하며, 논문별 근거는 아래 **시드·초기 noise** 항목에 표시했다.
 - **Reference video 추가 확인일:** 2026-10-15. 아래 표는 현재 생성 목표를 위한 외부 참조 영상 사용 여부를 기준으로 한다.
-- **비교 범위:** 영상·shot·segment를 생성한 뒤 피드백이나 생성 결과를 활용해 다시 생성하는 추론 시 반복 개선. prompt 수정뿐 아니라 NoisEasier의 reward 기반 noise 최적화와 FreeInit의 clean latent 기반 재초기화를 포함한다. 생성 전 계획 수정, 학습 데이터 구축, 단일 sampling 내부에서만 수행하는 보정·탐색은 별도 범위로 남겼다.
+- **비교 범위:** 영상·shot·segment를 생성한 뒤 피드백이나 생성 결과를 활용해 다시 생성하는 추론 시 반복 개선을 중심으로 한다. NoisEasier의 noise 최적화와 FreeInit의 재초기화 외에, **sampling 내부 보정(Self-Refining Video Sampling)**과 **원본 영상의 국소 편집(VideoGrain)**도 관련 메커니즘으로 비교한다. 이 두 방법은 완성 영상을 평가해 다시 만드는 feedback loop와 구분한다.
 - **연도 기준:** ‘최초 공개’는 arXiv v1 연도이며, 학회 발표 연도와 구분했다. ‘채택 미확인’은 확인한 1차 출처에서 채택 근거를 확보하지 못했다는 뜻이다.
-- **기호:** O = 해당함, X = 해당하지 않음, △ = 조건부·선택적 지원 또는 비교 범위가 다른 이력, — = 확인한 원문·공식 구현에서 정책이나 범위 미확인. 우리 방법은 구현 검증 결과가 아닌 설계안이다.
+- **기호:** O = 해당함, X = 해당하지 않음, △ = 조건부·선택적 지원 또는 비교 범위가 다른 이력, — = 정책·범위 미확인 또는 해당 비교축 적용 대상 아님(본문에서 구분). 우리 방법은 구현 검증 결과가 아닌 설계안이다.
 
 | 논문 | 최초 공개 | 발표처·연도 | 공간 국소 수정 | 시간 선택 수정 | 누적 텍스트 이력 | 누적 시각 이력 | 시드 변경 | 초기 noise 변경 | Reference video 사용 |
 |---|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -20,6 +20,8 @@
 | CineCrew | 2026 | ECCV 2026 | X | O | O | △ | △ | — | X |
 | NoisEasier | 2026 | ECCV 2026 | X | X | X | X | — | O | X |
 | FreeInit | 2023 | ECCV 2024 | X | X | X | X | X | O | X |
+| Self-Refining Video Sampling    | 2026  | ICML 2026             |    △     |    X     |     X     |    X     |   —   |      —      |         X          |
+| VideoGrain                      | 2025  | ICLR 2025             |    O     |    X     |     X     |    X     |   —   |      —      |         X          |
 | VideoAgent | 2024 | RLBRew @ RLC 2025 워크숍 | X | X | X | X | X | O | X |
 | Bootstrapping Physics-Grounded… | 2025 | ICCV 2025 워크숍 챌린지 보고 | X | X | — | — | — | — | O |
 | AIGVE-MACS refinement | 2025 | CVPR 2026 VGBE 워크숍 | X | X | — | — | — | — | X |
@@ -31,6 +33,7 @@
 | VQQA | 2026 | 채택 미확인 | X | X | △ | X | O | O | X |
 | **우리 방법 · 설계안** | — | — | O | O | O | O | — | — | X |
 
+- **Sampling·편집 비교군:** Self-Refining의 공간 △는 uncertainty-aware 확장형에만 해당하며 기본 P&P는 X이다. Self-Refining·VideoGrain의 시드/초기 noise —는 완성 영상 간 반복이 없어 해당 축의 적용 대상이 아니라는 뜻이다. VideoGrain의 필수 원본 영상은 편집 대상이므로 아래 reference 정의에서는 X로 구분한다.
 - **공간 국소 수정:** 생성된 영상의 특정 영역에 mask 등으로 수정 제어를 적용하는지. ROI 밖 픽셀이 정확히 고정된다는 뜻은 아니다. 입력 객체를 검출하거나 생성 layout을 지정하는 것만으로는 O로 보지 않는다.
 - **시간 선택 수정:** 실패한 프레임·shot·segment를 골라 다시 생성하는지. 평가 시 일부 프레임만 관찰하거나 I2V 입력 첫 프레임을 유지하는 것은 포함하지 않는다. SPIRAL·CoAgent·A²RD·CineCrew의 O는 segment·shot 단위이다.
 - **누적 이력:** 다음 수정에 여러 과거 결과·피드백을 참조하는지. 직전 결과 하나 또는 best-so-far 하나만 이어 쓰면 X이다. O도 모든 iteration의 모든 정보를 빠짐없이 입력한다는 뜻은 아니며, 실제 범위는 각 논문의 History 항목에 적었다.
@@ -164,6 +167,33 @@
 - **History:** 직전 생성 latent의 구조를 다음 초기 noise에 전달한다. 과거 여러 수정본을 명시적으로 보관·재입력하는 텍스트·시각 history는 없다.
 - **비교 포인트:** 외부 critic 없이 생성 결과의 저주파 구조를 재사용하는 반복 개선이다. prompt는 고정하며, VLM이 오류를 진단하고 수정 범위를 선택하는 방법과 구분한다.
 - **근거:** [§4, Eq. 8–11, Fig. 7, §5.1](https://arxiv.org/html/2312.07537v2). 통상적인 한 번의 denoising 내부 반복과 달리, clean latent를 만든 뒤 sampling을 다시 시작한다.
+
+### Self-Refining Video Sampling
+
+- **발표:** 최초 공개 **2026** → **ICML 2026 본회의**. [arXiv 이력](https://arxiv.org/abs/2601.18577), [공식 proceedings](https://proceedings.mlr.press/v306/jang26d.html).
+- **핵심 방법:** 추가 학습·외부 평가 모델 없이, **한 번의 sampling 내부**에서 생성 모델 자체로 latent를 보정한다.
+	- **기본 P&P:** 현재 noisy latent에서 clean latent 예측 → 새 Gaussian noise를 섞어 같은 noise level로 되돌림 → 정해진 횟수만 반복한 뒤 다음 timestep으로 진행한다. 완성 영상의 재생성이 아니며, 주로 sampling 초반에 적용한다.
+	- **Uncertainty-aware P&P:** 연속한 clean latent 예측의 위치별 차이가 큰 곳을 mask로 선택한다. 불확실한 영역은 새 보정값을 반영하고, 안정적인 영역은 이전 후보 값을 유지해 과도한 보정을 줄인다.
+- **Reference video:** X. 외부 목표 영상은 사용하지 않는다. I2V 실험의 입력 이미지는 별도 이미지 조건이다.
+- **공간·시간 범위:** 공간 △, 시간 X. **기본 P&P에는 공간 선택이 없고 uncertainty-aware 확장형에만 국소 제어가 있다.** 비교 대상은 RGB로 디코딩한 영상이 아닌 clean latent 예측이다. 모델 연산은 전체 latent에 수행하며, 성공한 최종 프레임을 골라 영구 freeze하지 않는다.
+- **시드·초기 noise:** — / —(완성 영상 간 반복이 없어 해당 축 적용 대상 아님). P&P 내부에서는 새 noise를 뽑지만, 전체 sampling을 새 initial noise로 재시작하는 방식과 구분한다.
+- **History:** 텍스트 X / 시각 X. 현재·직전 clean 예측의 차이와 이전 latent 후보를 사용하며, 여러 완성 영상·prompt·피드백을 누적 입력하지 않는다.
+- **비교 포인트:** 자체 예측의 불안정성으로 수정 위치를 정하는 방법. 우리 설계의 완성 영상 간 ROI 계산·VLM 판단과 비교할 때 **보정 시점과 판단 신호**를 구분해야 한다.
+- **근거:** [§4.2–4.3, Algorithm 1](https://arxiv.org/html/2601.18577v1#S4.SS2), [공식 프로젝트](https://agwmon.github.io/self-refine-video/).
+
+### VideoGrain
+
+- **발표:** 최초 공개 **2025** → **ICLR 2025 본회의**. *VideoGrain: Modulating Space-Time Attention for Multi-Grained Video Editing*. [arXiv 이력](https://arxiv.org/abs/2502.17258), [공식 proceedings](https://proceedings.iclr.cc/paper_files/paper/2025/hash/4bfcebedf7a2967c410b64670f27f904-Abstract-Conference.html).
+- **핵심 방법:** 원본 영상과 전역·영역별 편집 prompt를 받아, **객체 종류·개별 객체·객체 일부**를 구분해 편집하는 training-free 방법이다.
+	- **영역 구성:** 원본 영상을 DDIM inversion → self-attention feature clustering과 SAM-Track으로 영역·객체를 구분 → 각 영역에 local prompt를 연결한다.
+	- **편집 제어:** cross-attention은 prompt가 해당 영역에 집중하게 하고, 시공간 self-attention은 같은 객체의 프레임 간 연결을 강화하면서 다른 객체와의 혼선을 줄인다. 예를 들어 두 사람을 서로 다른 캐릭터로 바꿀 수 있다.
+	- **보존:** 수정 mask 밖은 각 denoising timestep에서 원본 inversion latent와 합치는 latent blending으로 보존한다.
+- **Reference video:** 표 기준 X. **편집할 원본 영상 입력은 필수**지만, 이는 현재 수정 대상이다. 별도의 목표 동작·내용을 지정하는 reference video와 구분한다.
+- **공간·시간 범위:** 공간 O, 시간 X. 여러 ROI를 서로 다른 prompt로 편집하고 나머지를 보존한다. 모든 프레임에 시공간 제어를 적용하며, 실패 프레임만 선별해 재생성하는 기능은 없다.
+- **시드·초기 noise:** — / —(완성 영상 간 반복이 없어 해당 축 적용 대상 아님). 원본의 DDIM inversion latent에서 편집 sampling을 수행하며, 반복적인 seed 탐색·초기 noise 최적화 방법은 아니다.
+- **History:** 텍스트 X / 시각 X. 현재 원본 영상·영역 mask·편집 prompt·inversion 정보를 사용하며, 여러 과거 편집 결과와 피드백을 누적하지 않는다.
+- **비교 포인트:** ROI에 서로 다른 prompt를 적용하는 구체적인 수정 메커니즘이다. 오류 자동 진단이나 ROI 타당성 검증은 제공하지 않는다. 실험 backbone은 SD 1.5이며 Wan 계열에 그대로 적용된 결과는 아니다.
+- **근거:** [§3.2–3.4, §4.1, Appendix I](https://arxiv.org/html/2502.17258v1), [공식 구현](https://github.com/knightyxp/VideoGrain).
 
 ## 워크숍
 
