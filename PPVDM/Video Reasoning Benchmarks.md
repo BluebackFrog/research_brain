@@ -22,50 +22,52 @@
 | **혼합형** | 과제 또는 지표에 따라 규칙 검사·수치 비교·VLM 판정을 함께 사용 | 일부 과제가 규칙 기반이어도 전체 벤치마크를 규칙 기반이라고 부르면 안 됨 |
 
 - **표를 읽는 기준:** `평가 대상`은 모델이 영상으로 구현해야 하는 능력, `실제 채점 방식`은 생성 결과를 점수로 바꾸는 절차이다. 사람 평가는 자동 평가와의 일치도 검증 또는 별도 평가로 사용될 수 있다.
+- **최초 공개일:** 해당 벤치마크를 제안한 논문의 **arXiv v1 제출일**을 기준으로 적는다. 최신 개정일이나 학회 개최일과 구분하며, 날짜 링크에서 원 논문과 제출 이력을 확인할 수 있다.
+- **학회·저널:** 공식 proceedings 또는 저자의 공식 논문·프로젝트에서 accept를 명시한 경우만 기재한다. 본회의·Findings·워크숍·별도 트랙을 구분하며, **“accept 확인 안 됨”은 미채택·거절을 뜻하지 않고 확인일 기준으로 공개 근거를 찾지 못했다는 뜻**이다.
 - **입력과 출력:** 생성형 추론은 지시문과 과제 이미지 등을 입력해 풀이·상태 변화 영상을 생성한다. 물리·월드모델 평가는 프롬프트, 초기 이미지 또는 영상의 앞부분을 조건으로 후속 영상을 생성하며, 정확한 입력 형식은 벤치마크·트랙마다 다르다.
 
 ## 1. 생성형 추론 — 규칙 기반·혼합형
 
-| 벤치마크 | 평가 대상 | 평가 방식 | 실제 채점 방식 |
-| --- | --- | --- | --- |
-| **[VBVR-Bench](https://www.video-reason.com/bench/)** | 추상화·지식·지각·공간·변환, 100태스크·500샘플 | **규칙 기반** | 태스크별 전용 scorer가 영상의 상태·관계·변화를 검사해 0–1 점수를 계산한다. VLM judge 없이 평가한다. [공식 평가 코드](https://github.com/Video-Reason/VBVR-EvalKit) |
-| **[VBVR-Pro-Bench](https://github.com/Video-Reason/VBVR-Pro-Bench)** | 영상 및 단계별 이미지 생성으로 수행하는 시각 추론, 설정별 100태스크·500샘플 | **규칙 기반** | OpenCV, 객체 매칭, 다중 객체 추적, 조합 알고리즘으로 태스크별 검증을 수행한다. 일부 과제는 EasyOCR로 문자를 읽지만 최종 점수를 판단하는 neural judge는 없다. |
-| **[VR-Bench](https://arxiv.org/html/2511.15065)** | 일반·불규칙·함정·3D 미로, 상자를 목표 위치로 옮기는 Sokoban | **궤적 지표 + VLM** | 추적한 경로를 정답 경로와 비교해 일치도·성공률·진행률·이동 단계 차이를 계산한다. 별도로 VLM이 움직임 연속성, 미로 구조 유지, 상호작용 등 규칙 준수를 판정한다. [공식 코드](https://github.com/FoundationAgents/VR-Bench) |
-| **[TiViBench](https://arxiv.org/html/2511.13704)** | 구조·공간·기호 추론·행동 계획, 24태스크 | **규칙·특징 비교 + VLM** | 과제별로 OpenCV/OCR 정답 검사, DINO 관심 영역 특징 유사도, DINO-X 객체 검출·궤적 검사, **Gemini-2.5-Pro QA**를 사용한다. 최종 상태와 중간 과정 평가를 구분한다. |
-| **[V-ReasonBench](https://arxiv.org/html/2511.16668)** | 문제풀이·공간 인지·패턴 추론·물리 변화 | **정답 자료와 비교 + VLM** | 주로 마지막 프레임을 평가한다. 마스크 영역의 가중 픽셀 오차, 격자별 정답 일치율, VLM의 기호 추출·구조 판정을 과제별로 사용한다. 마스크는 template 또는 SAM-2로 얻는다. |
-| **[VideoThinkBench](https://arxiv.org/html/2511.04570)** | 기하·퍼즐·ARC·미로·수학·지식 문제 | **과제별 규칙 검사 + GPT-4o·사람** | 미로는 마지막 프레임의 경로 연결성과 벽 침범을 픽셀로 검사한다. 기하 과제는 선택 표시 추출·여러 프레임의 투표 등을 사용하고, 텍스트 중심 문제는 **GPT-4o**가 마지막 프레임 또는 음성 전사를 정답과 비교한다. |
-| **[MMGR](https://arxiv.org/html/2512.14691)** | 추상 추론·환경 내 이동 계획·물리 상식 | **규칙 검사 + VLM** | 미로의 픽셀 경로 검사, Sudoku의 OCR·주어진 숫자 유지·제약 검사를 제공한다. 이동·물리 등은 **Gemini-2.5-Pro**가 기준별 중간·최종 상태를 판정한다. 주 점수의 출처에 관한 본문·부록의 설명 차이는 아래 주의점에 별도 기록했다. |
-| **[RISE-Video](https://arxiv.org/html/2602.05986)** | 상식·지식·논리·공간·시간 등 8범주의 암묵적 규칙 | **VLM 중심 + 일부 규칙** | 대부분 **GPT-5**가 추론 정합성·시간 일관성·물리 합리성을, **GPT-5-mini**가 시각 품질을 평가한다. 미로는 궤적·벽 침범·목표 도달 검사, 대칭 과제는 정답 격자 비교를 사용한다. 보드게임은 정답 이미지를 제공해도 최종 판정은 VLM이 한다. |
+| 벤치마크 | 최초 공개일 | 학회·저널 | 평가 대상 | 평가 방식 | 실제 채점 방식 |
+| --- | --- | --- | --- | --- | --- |
+| **[VBVR-Bench](https://www.video-reason.com/bench/)** | [2026-02-23](https://arxiv.org/abs/2602.20159) | [ICML 2026 본회의](https://proceedings.mlr.press/v306/wang26ia.html) | 추상화·지식·지각·공간·변환, 100태스크·500샘플 | **규칙 기반** | 태스크별 전용 scorer가 영상의 상태·관계·변화를 검사해 0–1 점수를 계산한다. VLM judge 없이 평가한다. [공식 평가 코드](https://github.com/Video-Reason/VBVR-EvalKit) |
+| **[VBVR-Pro-Bench](https://github.com/Video-Reason/VBVR-Pro-Bench)** | [2026-08-26](https://arxiv.org/abs/2608.26105) | accept 확인 안 됨 | 영상 및 단계별 이미지 생성으로 수행하는 시각 추론, 설정별 100태스크·500샘플 | **규칙 기반** | OpenCV, 객체 매칭, 다중 객체 추적, 조합 알고리즘으로 태스크별 검증을 수행한다. 일부 과제는 EasyOCR로 문자를 읽지만 최종 점수를 판단하는 neural judge는 없다. |
+| **[VR-Bench](https://arxiv.org/html/2511.15065)** | [2025-11-19](https://arxiv.org/abs/2511.15065) | accept 확인 안 됨 | 일반·불규칙·함정·3D 미로, 상자를 목표 위치로 옮기는 Sokoban | **궤적 지표 + VLM** | 추적한 경로를 정답 경로와 비교해 일치도·성공률·진행률·이동 단계 차이를 계산한다. 별도로 VLM이 움직임 연속성, 미로 구조 유지, 상호작용 등 규칙 준수를 판정한다. [공식 코드](https://github.com/FoundationAgents/VR-Bench) |
+| **[TiViBench](https://arxiv.org/html/2511.13704)** | [2025-11-17](https://arxiv.org/abs/2511.13704) | [CVPR 2026 본회의](https://openaccess.thecvf.com/content/CVPR2026/html/Chen_TiViBench_Benchmarking_Think-in-Video_Reasoning_for_Video_Generation_CVPR_2026_paper.html) | 구조·공간·기호 추론·행동 계획, 24태스크 | **규칙·특징 비교 + VLM** | 과제별로 OpenCV/OCR 정답 검사, DINO 관심 영역 특징 유사도, DINO-X 객체 검출·궤적 검사, **Gemini-2.5-Pro QA**를 사용한다. 최종 상태와 중간 과정 평가를 구분한다. |
+| **[V-ReasonBench](https://arxiv.org/html/2511.16668)** | [2025-11-20](https://arxiv.org/abs/2511.16668) | accept 확인 안 됨 | 문제풀이·공간 인지·패턴 추론·물리 변화 | **정답 자료와 비교 + VLM** | 주로 마지막 프레임을 평가한다. 마스크 영역의 가중 픽셀 오차, 격자별 정답 일치율, VLM의 기호 추출·구조 판정을 과제별로 사용한다. 마스크는 template 또는 SAM-2로 얻는다. |
+| **[VideoThinkBench](https://arxiv.org/html/2511.04570)** | [2025-11-06](https://arxiv.org/abs/2511.04570) | [CVPR 2026 본회의](https://openaccess.thecvf.com/content/CVPR2026/html/Tong_Thinking_with_Video_Video_Generation_as_a_Promising_Multimodal_Reasoning_CVPR_2026_paper.html) | 기하·퍼즐·ARC·미로·수학·지식 문제 | **과제별 규칙 검사 + GPT-4o·사람** | 미로는 마지막 프레임의 경로 연결성과 벽 침범을 픽셀로 검사한다. 기하 과제는 선택 표시 추출·여러 프레임의 투표 등을 사용하고, 텍스트 중심 문제는 **GPT-4o**가 마지막 프레임 또는 음성 전사를 정답과 비교한다. |
+| **[MMGR](https://arxiv.org/html/2512.14691)** | [2025-12-16](https://arxiv.org/abs/2512.14691) | [EMNLP 2026 본회의](https://zefan-cai.github.io/research/mmgr/) | 추상 추론·환경 내 이동 계획·물리 상식 | **규칙 검사 + VLM** | 미로의 픽셀 경로 검사, Sudoku의 OCR·주어진 숫자 유지·제약 검사를 제공한다. 이동·물리 등은 **Gemini-2.5-Pro**가 기준별 중간·최종 상태를 판정한다. 주 점수의 출처에 관한 본문·부록의 설명 차이는 아래 주의점에 별도 기록했다. |
+| **[RISE-Video](https://arxiv.org/html/2602.05986)** | [2026-02-05](https://arxiv.org/abs/2602.05986) | [NeurIPS 2026 Datasets & Benchmarks 트랙](https://neurips.cc/virtual/2026/poster/139505) | 상식·지식·논리·공간·시간 등 8범주의 암묵적 규칙 | **VLM 중심 + 일부 규칙** | 대부분 **GPT-5**가 추론 정합성·시간 일관성·물리 합리성을, **GPT-5-mini**가 시각 품질을 평가한다. 미로는 궤적·벽 침범·목표 도달 검사, 대칭 과제는 정답 격자 비교를 사용한다. 보드게임은 정답 이미지를 제공해도 최종 판정은 VLM이 한다. |
 
 ## 2. 생성형 추론 — VLM·사람 판정
 
-| 벤치마크 | 평가 대상 | 평가자 | 실제 채점 방식 |
-| --- | --- | --- | --- |
-| **[RULER-Bench](https://arxiv.org/html/2512.02622)** | 시각·과학·가설·게임·의미·사회 규칙 | **o3** | 지시 준수·시각 일관성·시각 품질·규칙 일관성의 체크리스트를 good/medium/bad로 판정한다. **제목의 “Rule-based”는 추론 과제의 성격이며 evaluator가 규칙 코드라는 뜻이 아니다.** |
-| **[VIPER](https://arxiv.org/html/2512.24952)** | 시간·구조·기호·공간·물리·계획 추론, 16태스크 | **GPT-5** | 샘플링한 프레임을 보고 최종 결과의 정확성과 과정의 제약 준수를 각각 판단한다. 기본 **POC@1.0은 결과와 과정이 모두 맞아야 성공**이다. [공식 코드](https://github.com/RUCAIBox/VIPER) |
-| **[MME-CoF](https://arxiv.org/html/2510.26802)** | 여러 프레임을 연결한 공간·기하·물리 등 추론, 12종 | **Gemini-2.5-Pro** | 지시 정합성·시간 일관성·시각 안정성·내용 충실도·관련성을 각각 0–4점으로 평가한다. 필수 추론 단계별 성공률을 직접 계산하는 지표는 아니다. |
-| **[MME-CoF-Pro](https://arxiv.org/html/2603.20194)** | 추론 과정의 일관성, 텍스트·시각 힌트 활용, 16범주 | **Gemini-2.5-Flash** | 매 10번째 프레임을 보고, 사람이 검증한 필수 중간 단계가 각각 성공했는지 판단한다. **성공한 단계 수 / 전체 필수 단계 수**를 Reasoning Score로 계산하고 생성 품질도 별도로 평가한다. |
-| **[VMEvalKit](https://arxiv.org/html/2512.05969)** | 체스·미로·Sudoku·머릿속 회전·도형 규칙 추론 | **GPT-4o + 사람** | 입력·정답 목표 이미지·생성 결과를 비교해 correctness를 1–5점으로 평가하며 4–5점을 성공으로 본다. 주로 마지막 상태를 평가하고 사람이 같은 척도로 검증하는 소규모 평가 suite이다. |
-| **[Gen-ViRe](https://arxiv.org/html/2511.13853)** | 지각·유추·추상·계획·시공간·알고리즘 추론, 24태스크 | **Gemini-2.5-Pro** | 정적 과제는 최종 이미지, 동적 과제는 영상 과정을 태스크별 기준으로 평가한다. 항목 점수를 0–1로 정규화하고 과제 단위 평균을 집계한다. “Hybrid”라는 표현이 별도 규칙 기반 scorer를 뜻하지는 않는다. [공식 코드](https://github.com/L-CodingSpace/GVR) |
-| **[VWG-Bench](https://arxiv.org/html/2609.11242)** | 9개 추론 차원·38태스크 | **Gemini-3.0-Pro** | 영상 품질·과정 일관성·암묵적 규칙 준수·중간 목표·최종 목표를 각각 1–5점으로 평가한다. 규칙 목록은 judge에게 제공하는 판단 기준이다. |
-| **[VGI-Bench](https://arxiv.org/html/2608.19583v3)** | 시각 조직화·시공간 변화·퍼즐·물체 조작, 27태스크 | **Gemini-3-Flash** | **목표 달성도(Completeness) × 과정 규칙 준수 점수(Rubric Score)**로 평가한다. 짧은 시간 구간별로 관찰하고, 위반이 의심되는 구간은 프레임을 더 촘촘히 확인한다. |
-| **[IntelligentVBench](https://github.com/Tencent-Hunyuan/OmniWeaving/blob/main/readme.md)** | 암묵적 I2V·시작/끝 프레임 연결·참조 기반 편집·다중 객체 조합 | **Gemini-2.5-Pro** | 태스크별 3개 차원을 1–5점으로 평가하고 평균과 최솟값을 보고한다. 퍼즐 풀이뿐 아니라 생성·편집의 추론과 조합 능력도 포함한다. |
+| 벤치마크 | 최초 공개일 | 학회·저널 | 평가 대상 | 평가자 | 실제 채점 방식 |
+| --- | --- | --- | --- | --- | --- |
+| **[RULER-Bench](https://arxiv.org/html/2512.02622)** | [2025-12-02](https://arxiv.org/abs/2512.02622) | accept 확인 안 됨 | 시각·과학·가설·게임·의미·사회 규칙 | **o3** | 지시 준수·시각 일관성·시각 품질·규칙 일관성의 체크리스트를 good/medium/bad로 판정한다. **제목의 “Rule-based”는 추론 과제의 성격이며 evaluator가 규칙 코드라는 뜻이 아니다.** |
+| **[VIPER](https://arxiv.org/html/2512.24952)** | [2025-12-31](https://arxiv.org/abs/2512.24952) | [ACL 2026 본회의 · Long Papers](https://aclanthology.org/2026.acl-long.934/) | 시간·구조·기호·공간·물리·계획 추론, 16태스크 | **GPT-5** | 샘플링한 프레임을 보고 최종 결과의 정확성과 과정의 제약 준수를 각각 판단한다. 기본 **POC@1.0은 결과와 과정이 모두 맞아야 성공**이다. [공식 코드](https://github.com/RUCAIBox/VIPER) |
+| **[MME-CoF](https://arxiv.org/html/2510.26802)** | [2025-10-30](https://arxiv.org/abs/2510.26802) | [CVPR 2026 Findings](https://openaccess.thecvf.com/content/CVPR2026F/html/Guo_Are_Video_Models_Ready_as_Zero-Shot_Reasoners_An_Empirical_Study_CVPRF_2026_paper.html) | 여러 프레임을 연결한 공간·기하·물리 등 추론, 12종 | **Gemini-2.5-Pro** | 지시 정합성·시간 일관성·시각 안정성·내용 충실도·관련성을 각각 0–4점으로 평가한다. 필수 추론 단계별 성공률을 직접 계산하는 지표는 아니다. |
+| **[MME-CoF-Pro](https://arxiv.org/html/2603.20194)** | [2026-03-20](https://arxiv.org/abs/2603.20194) | [ECCV 2026 본회의](https://link.springer.com/chapter/10.1007/978-3-032-37467-7_5) | 추론 과정의 일관성, 텍스트·시각 힌트 활용, 16범주 | **Gemini-2.5-Flash** | 매 10번째 프레임을 보고, 사람이 검증한 필수 중간 단계가 각각 성공했는지 판단한다. **성공한 단계 수 / 전체 필수 단계 수**를 Reasoning Score로 계산하고 생성 품질도 별도로 평가한다. |
+| **[VMEvalKit](https://arxiv.org/html/2512.05969)** | [2025-11-02](https://arxiv.org/abs/2512.05969v1) | accept 확인 안 됨 | 체스·미로·Sudoku·머릿속 회전·도형 규칙 추론 | **GPT-4o + 사람** | 입력·정답 목표 이미지·생성 결과를 비교해 correctness를 1–5점으로 평가하며 4–5점을 성공으로 본다. 주로 마지막 상태를 평가하고 사람이 같은 척도로 검증하는 소규모 평가 suite이다. |
+| **[Gen-ViRe](https://arxiv.org/html/2511.13853)** | [2025-11-17](https://arxiv.org/abs/2511.13853) | accept 확인 안 됨 | 지각·유추·추상·계획·시공간·알고리즘 추론, 24태스크 | **Gemini-2.5-Pro** | 정적 과제는 최종 이미지, 동적 과제는 영상 과정을 태스크별 기준으로 평가한다. 항목 점수를 0–1로 정규화하고 과제 단위 평균을 집계한다. “Hybrid”라는 표현이 별도 규칙 기반 scorer를 뜻하지는 않는다. [공식 코드](https://github.com/L-CodingSpace/GVR) |
+| **[VWG-Bench](https://arxiv.org/html/2609.11242)** | [2026-09-10](https://arxiv.org/abs/2609.11242) | [ECCV 2026 본회의](https://link.springer.com/chapter/10.1007/978-3-032-37595-7_30) | 9개 추론 차원·38태스크 | **Gemini-3.0-Pro** | 영상 품질·과정 일관성·암묵적 규칙 준수·중간 목표·최종 목표를 각각 1–5점으로 평가한다. 규칙 목록은 judge에게 제공하는 판단 기준이다. |
+| **[VGI-Bench](https://arxiv.org/html/2608.19583v3)** | [2026-08-20](https://arxiv.org/abs/2608.19583) | [EMNLP 2026 본회의](https://hexuan21.github.io/VGI-Bench/) | 시각 조직화·시공간 변화·퍼즐·물체 조작, 27태스크 | **Gemini-3-Flash** | **목표 달성도(Completeness) × 과정 규칙 준수 점수(Rubric Score)**로 평가한다. 짧은 시간 구간별로 관찰하고, 위반이 의심되는 구간은 프레임을 더 촘촘히 확인한다. |
+| **[IntelligentVBench](https://github.com/Tencent-Hunyuan/OmniWeaving/blob/main/readme.md)** | [2026-03-25](https://arxiv.org/abs/2603.24458v1) | accept 확인 안 됨 | 암묵적 I2V·시작/끝 프레임 연결·참조 기반 편집·다중 객체 조합 | **Gemini-2.5-Pro** | 태스크별 3개 차원을 1–5점으로 평가하고 평균과 최솟값을 보고한다. 퍼즐 풀이뿐 아니라 생성·편집의 추론과 조합 능력도 포함한다. |
 
 ## 3. 물리 추론·월드모델·조합적 생성
 
 - 아래 항목은 VBVR 같은 퍼즐·추상 추론과 평가 범위가 다르지만, **물리적으로 올바른 상태 변화와 지시 준수**를 다룬다는 점에서 PPVDM의 인접 비교 대상이다.
 
-| 벤치마크 | 평가 대상 | 평가 방식 | 실제 채점 방식 |
-| --- | --- | --- | --- |
-| **[Physics-IQ](https://arxiv.org/html/2501.09038v1) / [Verified](https://arxiv.org/html/2606.18943v1)** | 실제 물리 실험의 후속 움직임 예측 | **정답 영상과 수치 비교, VLM 없음** | 배경 차분·임계값·형태학적 처리로 움직임 마스크를 추출하고, 실제 촬영 정답 영상과 3종 IoU·RGB MSE를 비교한다. Verified는 정답 마스크·프롬프트·집계 등을 개선한다. **물리 법칙을 직접 검사하는 것이 아니라 실제 움직임과 비교한다.** [공식 코드](https://github.com/google-deepmind/physics-IQ-benchmark) |
-| **[PhyGenBench / PhyGenEval](https://github.com/OpenGVLab/PhyGenBench)** | 160프롬프트·27물리 법칙 | **VQA/VLM 다단계 평가** | 핵심 현상은 VQAScore, 사건 순서는 GPT-4o 또는 LLaVA-Interleave, 전체 자연스러움은 GPT-4o 또는 InternVideo2 등으로 판정한다. 정답 후속 영상 대신 질문·평가 기준을 사용한다. |
-| **[VideoPhy](https://github.com/Hritikbansal/videophy)** | 고체·유체 상호작용의 물리 상식 | **사람 + 학습한 VLM** | 프롬프트와 의미가 맞는지(SA), 물리 상식에 맞는지(PC)를 평가한다. 자동 evaluator는 사람 라벨로 학습한 **VideoCon-Physics**이다. 사람 평가와 자동 평가의 leaderboard·집계 방식을 구분해야 한다. |
-| **[VideoPhy-2](https://github.com/Hritikbansal/videophy/tree/main/VIDEOPHY2)** | 스포츠·인체 동작·물체 조작 | **사람 + 학습한 VLM** | **VideoPhy-2-AutoEval**이 SA·PC를 1–5점으로 평가하고 개별 물리 규칙의 준수·위반·판단 불가도 분류한다. Joint 성공률은 **SA≥4와 PC≥4를 동시에 만족하는 비율**이다. |
-| **[WorldModelBench](https://arxiv.org/html/2502.20694v1)** | 로봇·운전·인간 활동 등 월드모델 능력 | **학습한 VLM** | VILA 계열 평가기가 지시 준수, 5개 물리 항목, 2개 상식·품질 항목을 평가해 0–10점으로 집계한다. [공식 코드](https://github.com/WorldModelBench-Team/WorldModelBench) |
-| **[PhyWorldBench](https://arxiv.org/html/2507.13428)** | 기본·복합 물리와 의도적인 비물리적 현상(Anti-Physics) | **사람 + 범용 VLM** | 주 실험에서는 **o1**이 8프레임을 보고 영상을 설명한 뒤, 시나리오별 기본·핵심 기준을 Yes/No로 판정한다. 명시적 기준 문장이 있어도 코드가 물리 규칙을 직접 검사하는 방식은 아니다. |
-| **[PhyGround / PhyJudge](https://github.com/NU-World-Model-Embodied-AI/PhyGround)** | 250개 텍스트·이미지 조건 생성 프롬프트, 13물리 법칙 | **학습한 VLM** | Qwen3.5-9B+LoRA 기반 **PhyJudge-9B**가 의미 일치·물리적 시간 순서·객체 지속성·해당 물리 법칙을 1–5점으로 평가한다. 원문 프롬프트와 법칙별 기준·관찰 질문을 함께 사용한다. |
-| **[WorldSimBench](https://arxiv.org/html/2410.18072)** | Minecraft·자율주행·로봇 조작 | **학습한 VLM + 시뮬레이터 성과** | 지각 평가 트랙은 Flash-VStream 기반 **Human Preference Evaluator**를 사용한다. 행동 평가 트랙은 생성 영상을 행동으로 변환해 MineRL·CARLA·CALVIN에서 실행하고 과제 성과를 측정하므로, 영상 파일만으로 평가가 끝나지 않는다. |
-| **[T2V-CompBench](https://arxiv.org/html/2407.14505)** | 속성·행동·공간관계·움직임·개수의 조합 | **VLM + 인식 결과의 규칙 검사** | 속성·행동·상호작용은 LLaVA 계열이 판정한다. 공간관계·개수는 검출·분할·깊이 모델의 출력에 규칙을 적용하고, 움직임은 객체 추적 궤적의 상대 이동으로 평가한다. [공식 코드](https://github.com/KaiyueSun98/T2V-CompBench/blob/V2/README.md) |
+| 벤치마크 | 최초 공개일 | 학회·저널 | 평가 대상 | 평가 방식 | 실제 채점 방식 |
+| --- | --- | --- | --- | --- | --- |
+| **[Physics-IQ](https://arxiv.org/html/2501.09038v1) / [Verified](https://arxiv.org/html/2606.18943v1)** | 원본 [2025-01-14](https://arxiv.org/abs/2501.09038)<br>Verified [2026-06-17](https://arxiv.org/abs/2606.18943) | 원본 [WACV 2026 본회의](https://openaccess.thecvf.com/content/WACV2026/html/Motamed_Do_Generative_Video_Models_Understand_Physical_Principles_WACV_2026_paper.html)<br>Verified: accept 확인 안 됨 | 실제 물리 실험의 후속 움직임 예측 | **정답 영상과 수치 비교, VLM 없음** | 배경 차분·임계값·형태학적 처리로 움직임 마스크를 추출하고, 실제 촬영 정답 영상과 3종 IoU·RGB MSE를 비교한다. Verified는 정답 마스크·프롬프트·집계 등을 개선한다. **물리 법칙을 직접 검사하는 것이 아니라 실제 움직임과 비교한다.** [공식 코드](https://github.com/google-deepmind/physics-IQ-benchmark) |
+| **[PhyGenBench / PhyGenEval](https://github.com/OpenGVLab/PhyGenBench)** | [2024-10-07](https://arxiv.org/abs/2410.05363) | [ICML 2025 본회의](https://proceedings.mlr.press/v267/meng25c.html) | 160프롬프트·27물리 법칙 | **VQA/VLM 다단계 평가** | 핵심 현상은 VQAScore, 사건 순서는 GPT-4o 또는 LLaVA-Interleave, 전체 자연스러움은 GPT-4o 또는 InternVideo2 등으로 판정한다. 정답 후속 영상 대신 질문·평가 기준을 사용한다. |
+| **[VideoPhy](https://github.com/Hritikbansal/videophy)** | [2024-06-05](https://arxiv.org/abs/2406.03520) | [ICLR 2025 본회의](https://proceedings.iclr.cc/paper_files/paper/2025/hash/fce2d8a485746f76aac7b5650db2679d-Abstract-Conference.html) | 고체·유체 상호작용의 물리 상식 | **사람 + 학습한 VLM** | 프롬프트와 의미가 맞는지(SA), 물리 상식에 맞는지(PC)를 평가한다. 자동 evaluator는 사람 라벨로 학습한 **VideoCon-Physics**이다. 사람 평가와 자동 평가의 leaderboard·집계 방식을 구분해야 한다. |
+| **[VideoPhy-2](https://github.com/Hritikbansal/videophy/tree/main/VIDEOPHY2)** | [2025-03-09](https://arxiv.org/abs/2503.06800) | [ICLR 2026 본회의](https://proceedings.iclr.cc/paper_files/paper/2026/hash/c02f6a1d5c55e16db50d339dad905b4d-Abstract-Conference.html) | 스포츠·인체 동작·물체 조작 | **사람 + 학습한 VLM** | **VideoPhy-2-AutoEval**이 SA·PC를 1–5점으로 평가하고 개별 물리 규칙의 준수·위반·판단 불가도 분류한다. Joint 성공률은 **SA≥4와 PC≥4를 동시에 만족하는 비율**이다. |
+| **[WorldModelBench](https://arxiv.org/html/2502.20694v1)** | [2025-02-28](https://arxiv.org/abs/2502.20694) | [NeurIPS 2025 Datasets & Benchmarks 트랙](https://papers.nips.cc/paper_files/paper/2025/hash/4ec03ed08a3fcb59e1c815b5598beff1-Abstract-Datasets_and_Benchmarks_Track.html) | 로봇·운전·인간 활동 등 월드모델 능력 | **학습한 VLM** | VILA 계열 평가기가 지시 준수, 5개 물리 항목, 2개 상식·품질 항목을 평가해 0–10점으로 집계한다. [공식 코드](https://github.com/WorldModelBench-Team/WorldModelBench) |
+| **[PhyWorldBench](https://arxiv.org/html/2507.13428)** | [2025-07-17](https://arxiv.org/abs/2507.13428) | [ICLR 2026 본회의 · Oral](https://proceedings.iclr.cc/paper_files/paper/2026/hash/79d86433c2acd12b6fa98553435d226e-Abstract-Conference.html) | 기본·복합 물리와 의도적인 비물리적 현상(Anti-Physics) | **사람 + 범용 VLM** | 주 실험에서는 **o1**이 8프레임을 보고 영상을 설명한 뒤, 시나리오별 기본·핵심 기준을 Yes/No로 판정한다. 명시적 기준 문장이 있어도 코드가 물리 규칙을 직접 검사하는 방식은 아니다. |
+| **[PhyGround / PhyJudge](https://github.com/NU-World-Model-Embodied-AI/PhyGround)** | [2026-05-11](https://arxiv.org/abs/2605.10806) | accept 확인 안 됨 | 250개 텍스트·이미지 조건 생성 프롬프트, 13물리 법칙 | **학습한 VLM** | Qwen3.5-9B+LoRA 기반 **PhyJudge-9B**가 의미 일치·물리적 시간 순서·객체 지속성·해당 물리 법칙을 1–5점으로 평가한다. 원문 프롬프트와 법칙별 기준·관찰 질문을 함께 사용한다. |
+| **[WorldSimBench](https://arxiv.org/html/2410.18072)** | [2024-10-23](https://arxiv.org/abs/2410.18072) | [ICML 2025 본회의](https://proceedings.mlr.press/v267/qin25f.html) | Minecraft·자율주행·로봇 조작 | **학습한 VLM + 시뮬레이터 성과** | 지각 평가 트랙은 Flash-VStream 기반 **Human Preference Evaluator**를 사용한다. 행동 평가 트랙은 생성 영상을 행동으로 변환해 MineRL·CARLA·CALVIN에서 실행하고 과제 성과를 측정하므로, 영상 파일만으로 평가가 끝나지 않는다. |
+| **[T2V-CompBench](https://arxiv.org/html/2407.14505)** | [2024-07-19](https://arxiv.org/abs/2407.14505) | [CVPR 2025 본회의](https://openaccess.thecvf.com/content/CVPR2025/html/Sun_T2V-CompBench_A_Comprehensive_Benchmark_for_Compositional_Text-to-video_Generation_CVPR_2025_paper.html) | 속성·행동·공간관계·움직임·개수의 조합 | **VLM + 인식 결과의 규칙 검사** | 속성·행동·상호작용은 LLaVA 계열이 판정한다. 공간관계·개수는 검출·분할·깊이 모델의 출력에 규칙을 적용하고, 움직임은 객체 추적 궤적의 상대 이동으로 평가한다. [공식 코드](https://github.com/KaiyueSun98/T2V-CompBench/blob/V2/README.md) |
 
 ## 최종 결과와 중간 과정의 차이
 
@@ -90,6 +92,9 @@
 
 ## 해석할 때 주의할 점
 
+- **후속 논문에 원본의 채택 이력을 옮겨 쓰지 않는다.** VBVR-Pro-Bench는 VBVR-Bench와 별도 논문이고, Physics-IQ Verified도 원본과 별도 논문이다. VMEvalKit의 옛 저장소가 현재 VBVR-EvalKit로 이동하더라도 그곳의 ICML 2026 표기는 VBVR 논문의 이력이다.
+- **논문 공개와 데이터 공개를 구분한다.** IntelligentVBench를 소개한 OmniWeaving 논문은 2026-03-25에 처음 제출됐고 데이터는 2026-04-03에 공개됐다. 표에는 논문 날짜를 적었다. [공식 저장소](https://github.com/Tencent-Hunyuan/OmniWeaving)
+- **VMEvalKit의 날짜는 arXiv 표시를 따른다.** 식별자는 `2512.05969`이지만 공식 페이지의 제출 이력은 2025-11-02로 표시되어 있어, 식별자의 월을 추정해 쓰지 않았다. [arXiv v1](https://arxiv.org/abs/2512.05969v1)
 - **규칙을 평가하는 것과 규칙으로 채점하는 것은 다르다.** RULER-Bench의 rule coherence, PhyWorldBench의 물리 기준, VWG-Bench의 규칙 목록은 VLM에게 주는 판단 기준이다.
 - **평가 기준을 만드는 모델과 실제 judge를 구분한다.**
 
