@@ -1,91 +1,40 @@
 # Efficient Video Diffusion Generation — Related Work 목록
 
-확인일: **2026-10-26**. 비디오 diffusion·flow-matching 생성의 추론 비용을 낮추는 **50편**을 정리했다. [비디오 추론 벤치마크 조사](thread://01a16659-7fb8-7632-bf41-6019ce6358a3?hostId=local)처럼 최초 공개 연월·학회 정보를 유지하면서, 각 방법을 **‘어디를 바꾸는가 → 원래 어떤 계산을 했는가 → 무엇으로 대체하는가 → 무엇을 보고 결정하는가’**로 설명한다.
+**50편** · 서지 확인: **2026-10-26** · 분류 정리: **2026-10-31**
 
-**분류 개편: 2026-10-31.** 1번의 12편을 재계산 판단과 출력 대체 방식에 따라 7개 소분류로 나눴다. 논문별 날짜·학회 정보는 위 확인일 기준을 유지했다.
+| 분류 | 실제로 줄이거나 바꾸는 계산 |
+|---|---|
+| **1. Step 사이 출력 재사용·예측** | 과거 feature로 현재 attention·블록·denoiser 계산 대체 |
+| **2. Attention 연결·토큰 축소** | 현재 attention의 연결·입력 토큰 수 및 희소 패턴 구성 비용 축소 |
+| **3. 소수 step 생성** | 적은 denoiser 호출로 영상을 완성하도록 학습 |
+| **4. 자기회귀·스트리밍** | frame/chunk를 순서대로 생성하고 과거 문맥의 KV 재사용 |
+| **5. 저정밀 연산·양자화** | 연산·저장에 쓰는 비트 수 축소 |
+| **6. 모델·latent 크기 축소** | 실행하는 신경망 또는 처리하는 영상 표현을 축소 |
+| **7. 다중 GPU 실행** | 계산을 여러 GPU에 분배하고 통신 대기 축소 |
+| **8. 여러 효율화 기법 결합** | 서로 다른 계산 위치의 가속을 함께 설계 |
+| **9. 후보 탐색 비용 축소** | 여러 seed를 생성·평가·선택하는 전체 예산 축소 |
 
-## 핵심 아이디어 먼저
+각 논문은 **주된 효율화 방식에 한 번만 배치**했다. 부가 기법과 변형은 해당 논문의 설명에 표시한다.
 
-비디오 diffusion은 작은 시공간 조각으로 나눈 영상의 압축 표현을 넣고, 신경망의 예측으로 그 표현을 여러 번 갱신한 뒤 영상으로 복원한다. 따라서 **신경망을 호출하는 횟수**, **한 번 호출할 때 통과하는 층과 연산**, **그 연산이 처리하는 토큰·연결·숫자 정밀도**는 서로 다른 효율화 대상이다. 같은 ‘캐싱’이라도 attention 출력만 재사용하는지, 여러 Transformer 블록을 통째로 우회하는지, 일부 토큰만 계산하는지가 다르다. 캐시를 사용할 위치가 같다면 그다음 차이는 **언제 재계산하고, 생략한 출력을 어떻게 채우는가**에 있다.
+- **논문 표기:** `ICLR'25 PAB (2408)` = accept · 짧은 제목 · arXiv v1 공개 연월. `(x)`는 확인한 accept가 없다는 뜻이며, `WS`는 워크숍, `TC`는 Technical Communications다.
+- **학습 표기:** Training-free의 `O`는 추가 신경망 학습 없음, 외부 모델·비디오 모델 학습의 `O`는 사용·학습 있음을 뜻한다. 사전 통계·보정·검색은 별도 표기했으며, 상세 판정 기준은 문서 끝에 정리했다.
 
-### 먼저, 한 번의 생성에서 계산이 일어나는 위치
+## 1. Diffusion step 사이의 출력 재사용·예측
 
-아래는 **latent video DiT의 일반적인 흐름을 단순화한 그림**이다. U-Net 기반 초기 연구와 causal/streaming 모델은 세부 구조가 다르며 해당 표에서 구분한다. I2V의 입력 이미지 인코딩, normalization·residual 연결 등은 그림에서 생략했다. [DiT 입력·스텝 구조](https://arxiv.org/html/2411.19108#S3.SS1) · [비디오 토큰과 attention](https://arxiv.org/html/2502.04507#S2.SS1)
+같은 영상을 denoise하는 동안 **이미 계산한 출력으로 현재 신경망 계산을 대체**한다. Sampling step과 sampler의 latent 갱신은 계속될 수 있다. 아래는 재계산 판단 신호, 출력 대체 방식, 계산 단위를 기준으로 나눴다.
 
-```mermaid
-flowchart TD
-    cond["텍스트·이미지 조건"] --> net
-    noise["노이즈 상태의 영상 latent"] --> token
-    subgraph step["① denoising step: 상태 갱신을 반복"]
-        token["latent를 토큰으로 변환"] --> net
-        net["② Denoiser: 여러 Transformer 블록<br/>각 블록의 attention + MLP"] --> pred
-        pred["노이즈·속도 등의 예측값"] --> cfg
-        cfg["③ CFG를 쓰면 조건부·무조건부 예측을 조합"] --> update
-        update["Sampler가 영상 latent를 갱신"]
-    end
-    update -->|"다음 step"| token
-    update -->|"마지막 step"| decode
-    decode["④ VAE decoder: latent를 픽셀 영상으로 복원"] --> video["출력 비디오"]
-```
-
-- **① 반복 횟수:** VideoLCM·T2V-Turbo 등은 적은 횟수의 신경망 호출로 생성하도록 모델을 다시 학습한다. 캐싱은 sampling step을 유지하면서 그 안의 비싼 계산을 우회할 수 있다.
-- **② 블록 내부:** attention은 토큰끼리 정보를 섞고, MLP는 각 토큰의 특징을 변환한다. PAB는 attention **출력**, TeaCache는 공식 HunyuanVideo 구현에서 Transformer 블록 묶음의 **입출력 차이**, STA는 attention에서 계산할 **토큰 쌍**, SageAttention2는 행렬곱의 **숫자 정밀도**를 다룬다.
-- **③ CFG 분기:** 보통 동일한 noisy latent로 조건부·무조건부 두 예측을 구한다. FasterCache의 CFG-Cache는 무조건부 예측을 근사하여 해당 신경망 평가를 줄인다. CFG를 쓰지 않는 모델에는 이 절감 항목이 없다.
-- **④ latent·복원:** H3AE는 영상의 압축 비율과 autoencoder 구조를 바꾼다. 그 결과 denoiser가 처리하는 latent 크기와 최종 복원 비용이 달라진다.
-
-**②의 attention 안에서도 위치를 나눠야 한다.** 입력 토큰으로부터 Q·K·V를 만들고, Q와 K의 유사도로 가중치 A를 구한 다음, A로 V를 섞어 출력을 만든다. Sparse attention은 계산할 Q–K 연결을 줄이고, token merging은 연산에 들어가는 토큰을 합치며, 양자화는 해당 곱셈을 더 적은 비트로 수행한다. attention 결과를 다음 denoising step에 재사용하는 캐싱은 이들과 다른 조작이다. [attention 연산 정의](https://arxiv.org/html/2502.04507#S2.SS1) · [저정밀 attention](https://arxiv.org/html/2411.10958#S3)
-
-### 같은 ‘빨라진다’라도 실제로 바뀌는 동작
-
-| 대표 방법 | 기존 계산 → 바뀐 계산 | 무엇이 핵심 차이인가 |
+| 소분류 | 논문 | 구분 기준 |
 |---|---|---|
-| [PAB](https://arxiv.org/abs/2408.12588) | 각 step에서 attention 출력을 다시 구함 → 일정 구간에서는 이전 step의 출력을 전달 | **같은 attention을 언제 다시 계산할지**를 바꾼다. |
-| [TeaCache](https://arxiv.org/html/2411.19108#S3.SS3) | 매 step마다 Transformer 블록들을 통과 → 변화가 작다고 판단한 step은 이전 블록 묶음의 residual로 대체 | attention 하나보다 **넓은 블록 구간**을 우회하고, 입력 변화로 우회 여부를 판단한다. |
-| [STA](https://arxiv.org/html/2502.04507#S3.SS1) | 현재 step의 모든 토큰 쌍에 attention → 시공간적으로 가까운 tile 사이만 계산 | 현재 step 안에서 **어느 토큰끼리 연결할지**를 바꾼다. |
-| [SageAttention2](https://arxiv.org/html/2411.10958#S3) | attention 행렬곱을 고정밀도로 수행 → Q/K의 INT4와 P/V의 FP8 연산 사용 | 연결을 줄이는 대신 **곱셈의 정밀도와 GPU 연산 방식**을 바꾼다. |
-| [VideoLCM](https://arxiv.org/abs/2312.09109) | 여러 step에 걸쳐 영상을 복원 → 소수 step으로 복원하도록 학습한 모델을 사용 | **신경망 호출 횟수 자체**를 줄인다. |
+| **1.1 입력 변화** | TeaCache, EasyCache, NaviCache | 현재 입력으로 큰 계산 구간의 출력 변화 추정 |
+| **1.2 얕은 층 probe** | DiCache | 앞쪽 층을 실행해 뒤쪽 층의 변화 추정 |
+| **1.3 residual 변화** | AdaCache | 실제 계산 결과의 변화로 다음 재사용 길이 결정 |
+| **1.4 입력·시간 민감도** | SenCache | 현재 이동량을 사전 민감도로 가중 |
+| **1.5 사전 변화 통계** | MagCache | 사전 측정한 step별 크기 비율로 오차 추정 |
+| **1.6 예정된 일정** | PAB, ProfilingDiT, DeepCache, T-GATE | 모듈·구간별로 정한 시점에 재계산 |
+| **1.7 feature 외삽** | FasterCache, TaylorSeer, HiCache | 과거 변화로 생략한 출력 tensor 자체를 예측 |
+| **1.8 token별 갱신** | Astraea | 현재 갱신할 token을 고르고 나머지 출력 재사용 |
 
-### 1–5번은 각각 무엇을 바꾸는가
-
-각 절은 **주된 효율화 대상**으로 묶었다. 서로 배타적인 분류는 아니며, 한 논문이 여러 축을 결합할 수 있다.
-
-| 절 | 바꾸는 대상 | 생성 과정에서 달라지는 동작 |
-|---|---|---|
-| **1. step 간 재사용** | 이미 계산한 feature를 다시 계산할지 | 현재 step의 attention·블록·denoiser 출력을 과거 cache나 외삽값으로 대체 |
-| **2. 연결·token별 계산** | 한 번의 forward가 처리할 연결·token | 현재 attention에서 일부 Q–K 연결만 계산하거나 token을 병합·선택적으로 갱신 |
-| **3. 소수 step 생성** | 영상을 완성하는 denoising 반복 횟수 | 많은 step의 동작을 적은 step으로 수행하도록 모델을 학습 |
-| **4. 자기회귀·스트리밍** | 영상 시간축에서 frame/chunk를 만드는 순서 | 전체 clip을 함께 다듬는 대신 앞 chunk부터 완성하고, 과거 문맥을 보며 다음 chunk 생성 |
-| **5. 연산·구조·시스템** | 숫자 정밀도·모델/latent 크기·GPU 실행 | 각 연산을 저비트로 수행하거나, 모델·입력 표현을 줄이거나, 여러 GPU에 분배; 여러 축을 결합하는 방법도 포함 |
-
-**1번과 2번:** NaviCache는 비슷한 step의 계산을 과거 결과로 대체한다. STA는 현재 step의 attention을 계산하되 연결할 token 쌍을 줄인다. 다만 **Astraea는 token별 출력 cache**, **DiTFastAttn은 attention 희소화와 step 재사용**, **LiteAttention은 skip-mask 재사용**을 결합하므로 두 축이 겹친다. 이들은 2번에 유지하되, 이를 모든 2번 논문이 순수하게 한 step 안에서만 작동한다는 뜻으로 읽지 않는다. [NaviCache §3.2](https://arxiv.org/html/2606.26795v2#S3.SS2) · [STA §3](https://arxiv.org/html/2502.04507v3#S3) · [Astraea §3](https://arxiv.org/html/2506.05096v4#S3)
-
-**3번과 5번:** 3번은 주로 **반복 횟수**, 5번은 **한 번 실행하는 연산·모델의 비용과 하드웨어 실행 방식**을 바꾼다. 예를 들어 VideoLCM은 teacher와 같은 구조의 student로 호출 수를 줄이고, VDMini는 블록을 제거해 작은 student를 만든 뒤 증류로 품질을 회복한다. 따라서 ‘증류를 쓰는가’만으로 둘을 나누면 안 된다. 5번의 TurboDiffusion은 소수 step 증류·희소 attention·양자화를 결합하므로 2·3·5번에 동시에 걸친다. [VideoLCM §3](https://arxiv.org/html/2312.09109#S3) · [VDMini §3.2–3.3](https://arxiv.org/html/2411.18375#S3.SS2) · [TurboDiffusion §1](https://arxiv.org/html/2512.16093#S1)
-
-## 문서를 읽는 기준
-
-- **논문 표기:** `ICLR'25 PAB (2408)`처럼 **accept · 짧은 이름 · 최초 공개 연월(YYMM)** 순서다. 논문명은 arXiv, accept는 확인 근거로 연결한다. 공개월은 **arXiv v1 제출일(UTC)** 기준이며, 더 이른 코드·OpenReview 공개까지 소급한 절대 최초 공개일은 아니다.
-- **Accept 표기:** `(x)`는 **확인한 accept가 없음**을 뜻하며 거절 확정을 뜻하지 않는다. `WS`는 워크숍, `TC`는 Technical Communications다. 학회 본회의·워크숍·저널을 구분한다.
-- **Training-free:** `O`는 적용을 위한 추가 신경망 학습이 없음, `X`는 추가 학습이 있음을 뜻한다. 통계 측정·다항식 fitting·설정 탐색은 `O (보정/검색)`으로, quantizer·보정 모듈의 gradient 학습은 `X (보정학습)`으로 표시한다. `FT`는 fine-tuning이며 버전별 차이를 함께 적었다.
-- **외부 모델 사용:** 기본 생성 파이프라인 외에 **준비·학습·후보 선택을 위해 별도로 실행하는 모델**을 뜻한다. 학습 loss를 제공하는 frozen teacher와 reward·discriminator·분할 모델을 포함하고 사용 단계를 표시한다. 기본 text encoder·VAE, 내부 router/scorer, 결과 보고만을 위한 평가 모델, 통계·오차 기준을 얻기 위한 원본 생성기 실행은 제외한다. 같은 Q/K로 dense attention 정답을 계산하는 것만으로 별도 외부 모델을 사용한다고 세지 않는다.
-- **비디오 모델 학습:** 생성기 backbone·LoRA·증류 student를 학습하면 `O`다. Router만 학습하거나 quantizer·오차 보정 모듈만 최적화하는 경우는 별도로 적는다. 기본 모델의 원래 사전학습이 아니라 **해당 효율화 방법을 적용하기 위해 추가로 하는 학습** 기준이다. AE 구조를 바꾸는 경우는 AE 학습도 명시한다.
-- **효율화 위치 / 방법:** 위치는 attention 출력·블록 residual·Q–K 연결·MLP·CFG 등 **어느 연산인가**, 방법은 복사·외삽·병합·희소화·양자화·증류 등 **그 연산을 어떻게 바꾸는가**다. 표의 조건과 세부 동작은 바로 아래 논문별 설명·원문 근거를 따른다.
-- **범위:** `X`는 표에 정리한 방법·설정에서 해당 요소를 쓰지 않는다는 뜻이다. 모든 변형에 대한 부재 증명은 아니다. Denoising step, 비디오 frame 시간축, 다음 chunk를 만드는 자기회귀 순서는 구분한다. 한 방법이 여러 위치를 바꿀 수 있으며, 학습 비용·연산량 감소·실제 지연시간 단축도 구분한다.
-
-## 1. Diffusion step 사이의 계산 재사용
-
-**공통 목표는 같은 영상을 denoise하는 step 사이의 반복 신경망 계산을 줄이는 것**이다. 그 안에서 **언제 재계산하는가**와 **생략한 출력을 무엇으로 채우는가**를 나눠 아래 7개 소분류로 정리했다. Sampling step을 유지해도 그 안의 신경망 계산은 생략할 수 있으며, sampler의 latent 갱신은 계속한다.
-
-| 소분류 | 논문 | 재사용을 정하는 기준 |
-|---|---|---|
-| **1.1 입력 변화 기반** | TeaCache, EasyCache, NaviCache | 현재 입력에서 출력 변화 추정 |
-| **1.2 얕은 층 probe 기반** | DiCache | 현재 얕은 층을 실행한 뒤 깊은 층의 변화 추정 |
-| **1.3 residual 변화로 간격 조절** | AdaCache / MoReg | 실제 계산한 residual 변화로 다음 재사용 길이 결정 |
-| **1.4 입력·시간 민감도 기반** | SenCache | 현재 latent·timestep 이동을 사전 민감도로 가중 |
-| **1.5 사전 통계 기반** | MagCache | 사전 residual 크기 비율로 예상 누적 오차 계산 |
-| **1.6 예정된 주기 재사용** | PAB, ProfilingDiT | 모듈·블록별로 정한 refresh schedule |
-| **1.7 feature 외삽** | FasterCache, TaylorSeer, HiCache | 예정된 refresh 사이의 feature tensor를 예측 |
-
-**‘현재 생성에서 변화가 작으면 스킵’에 직접 대응하는 큰 계산 구간의 방법은 1.1–1.4의 6편**이다. 1.5는 사전 통계 기반 비교군, 1.6–1.7은 step 간 중복을 활용하는 다른 방법으로 분리했다. 2번의 **Astraea**도 온라인 변화 신호를 쓰지만 **token 단위 갱신**이므로 이 여섯 편과 계산 단위가 다르다.
+**큰 계산 구간의 온라인 변화 적응은 1.1–1.4, token 단위의 온라인 선택은 1.8**에 모았다. 1.5–1.7은 사전 통계·예정된 일정·외삽을 이용하는 비교군이다.
 
 ### 1.1 입력 변화로 출력 변화를 추정
 
@@ -203,12 +152,14 @@ flowchart TD
 
 ### 1.6 정해진 schedule에 따라 feature 재사용
 
-**재사용할 모듈·구간과 갱신 일정을 정해 놓고 실행.** PAB는 attention 종류별 간격, ProfilingDiT는 배경 중심 블록 선별과 timestep별 간격이 핵심이다. step 간 변화가 작다는 관찰을 활용하지만, 현재 샘플의 현재 변화가 threshold 아래인지 매번 확인하는 방식은 아니다.
+**재사용할 모듈·구간과 갱신 일정을 정해 실행한다.** PAB는 attention 종류별 간격, ProfilingDiT는 배경 중심 블록 선별, DeepCache는 U-Net의 깊은 경로, T-GATE는 생성 전·후반의 attention 역할을 이용한다. DeepCache·T-GATE는 **이미지 diffusion에서 출발한 선행연구**로, 비디오 방법과 구조·검증 범위를 구분한다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
 | [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/file/092c2d45005ea2db40fc24c470663416-Paper-Conference.pdf) **[PAB (2408)](https://arxiv.org/abs/2408.12588)** | O | X | X | 개별 spatial·temporal·cross-attention의 출력 | 종류별 고정 주기로 attention 출력 재사용 |
 | [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/papers/Ma_Model_Reveals_What_to_Cache_Profiling-Based_Feature_Reuse_for_Video_ICCV_2025_paper.pdf) **[ProfilingDiT (2504)](https://arxiv.org/abs/2504.03140)** | O (profiling) | O — 준비: SAM2 | X | 배경에 주로 집중하는 블록 구간 전체 | 배경 중심 블록을 선별해 residual 재사용 |
+| [CVPR'24](https://openaccess.thecvf.com/content/CVPR2024/html/Ma_DeepCache_Accelerating_Diffusion_Models_for_Free_CVPR_2024_paper.html) **[DeepCache (2312)](https://arxiv.org/abs/2312.00858)** | O | X | X | U-Net 깊은 경로의 feature 재사용 | U-Net 깊은 feature를 재사용하고 얕은 경로만 새로 계산 |
+| [TMLR'25](https://openreview.net/pdf?id=xXs2GKXPnH) **[T-GATE (2404)](https://arxiv.org/abs/2404.02747)** | O | X | X | 생성 전반부 self-attention·후반부 cross-attention | 초기 self-attention 주기 재사용·후기 cross-attention 고정 |
 
 #### PAB
 
@@ -230,9 +181,29 @@ flowchart TD
 
 **Method 근거:** [§3.2–3.3, Eqs. 6–15](https://arxiv.org/html/2504.03140v2#S3.SS2)
 
+#### DeepCache
+
+- **효율화 위치:** **U-Net 깊은 main branch**; 이미지 diffusion에서 출발한 선행연구.
+
+- **기존 계산 → 대체 방식:** 원래 shallow downsampling→깊은 down/middle/up blocks→shallow upsampling을 모두 실행한다. DeepCache는 선택한 skip-connection 합류 지점에서 **이전 deep upsampling block의 고수준 feature**를 저장한다. 재사용 step에는 현재 입력의 shallow down path만 새로 계산해 저수준 feature를 얻고, 과거 deep feature와 concatenate한 후 남은 shallow up path를 실행한다. 깊은 중앙 구간은 생략하지만 현재 입력의 세부 변화와 최종 출력 계산은 유지한다.
+
+- **판단 기준·학습/준비:** **정해진 cache 깊이·refresh schedule.** 기본은 한 번 full U-Net 후 N−1번 partial inference이며, 변화가 큰 시점에 full 계산을 더 배치하는 비균일 schedule도 제시한다. 매 프레임이 같은지를 판정해 비디오 frame을 재사용하는 방식이나 DiT 전체 residual cache와 구분해야 한다.
+
+**Method 근거:** [§3.3, Eqs. 4–5 및 1:N inference](https://arxiv.org/html/2312.00858v2#S3.SS3)
+
+#### TGATE / T-GATE
+
+- **효율화 위치:** **초기 self-attention, 후기 cross-attention**; 이미지 diffusion 중심 선행연구.
+
+- **기존 계산 → 대체 방식:** 초기 의미 형성 구간에는 cross-attention을 계속 실행하고, warm-up 뒤 self-attention 출력만 일정 간격으로 재사용한다. gate step에서 각 cross-attention의 **conditional·unconditional 출력 평균**을 anchor로 저장한 뒤, 후기 세부 개선 구간에서는 cross-attention 계산을 이 고정값으로 대체하고 self-attention은 계속 실행한다. residual 경로와 다른 연산이 남으므로 attention 값을 고정해도 denoiser 최종 출력이 매번 같아지는 것은 아니다.
+
+- **판단 기준·학습/준비:** **고정 phase 분할 및 주기.** gate step, 초기 warm-up, self-attention 갱신 간격 k를 정한다. online feature 변화에 따른 adaptive threshold가 아니라, attention 종류별로 중요한 denoising 시기가 다르다는 분석을 이용한 schedule이다. 전체 denoiser 출력 재사용이나 단순한 ‘텍스트 embedding cache’와 다르다.
+
+**Method 근거:** [§4.1–4.2, Eq. 6 및 Fig. 5](https://arxiv.org/html/2404.02747v3#S4.SS1)
+
 ### 1.7 생략한 feature를 과거 변화로 외삽
 
-**최근 실제 feature와 변화 이력 → 계산하지 않은 step의 feature tensor 예측.** 주된 차이는 스킵 판단용 작은 수치를 만드는 1.1과 달리, 생략한 신경망 출력 자체를 예측한다는 점이다. 기본 refresh는 예정된 주기를 따르며, FasterCache에는 CFG 분기 근사도 결합된다.
+**최근 실제 feature와 변화 이력 → 생략한 출력 tensor 자체를 예측.** 1.1의 스킵 판단용 수치 예측과 구분한다. 기본 재계산은 예정된 주기를 따르며, FasterCache에는 CFG 분기 근사도 결합된다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
@@ -270,61 +241,39 @@ flowchart TD
 
 **Method 근거:** [§3.2–3.3, Eq. 5 및 Algorithm 1](https://arxiv.org/html/2508.16984v2#S3.SS2)
 
-## 2. 희소 어텐션·토큰별 계산 축소
+### 1.8 Token별로 갱신하거나 이전 출력 재사용
 
-**주로 줄이는 것: attention의 Q–K 연결 또는 token별 계산.** 같은 sparse 계열이어도 고정 공간 window, 현재 입력으로 선택한 K/V block, token 병합, 일부 Q 행만 갱신하는 방법이 다르다. LiteAttention은 연결의 생략 여부를 캐시하고, Astraea는 token 출력의 갱신 빈도를 바꾸므로 둘을 단순 token 삭제로 묶으면 안 된다.
+**현재 갱신할 token 위치를 고르고, 나머지는 이전 step의 출력으로 채운다.** Astraea는 입력 변화·중요도·오래 갱신하지 않은 정도를 함께 본다. 전체 계산 구간을 한꺼번에 스킵하는 1.1–1.4보다 선택 단위가 작다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
-| [NeurIPS'24](https://proceedings.neurips.cc/paper_files/paper/2024/file/0267925e3c276e79189251585b4100bf-Paper-Conference.pdf) **[DiTFastAttn (2406)](https://arxiv.org/abs/2406.08552)** | O (검색) | X | X | attention의 공간·step·CFG 분기 중복 | window attention + 잔차 보상·step/CFG 간 출력 재사용 |
-| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/papers/Wu_Importance-Based_Token_Merging_for_Efficient_Image_and_Video_Generation_ICCV_2025_paper.pdf) **[Importance Token Merging (2411)](https://arxiv.org/abs/2411.16720)** | O | X | X | 선택한 layer에 들어가는 token 수 | 중요 token을 보존하며 유사 token 병합 후 출력 복원 |
-| [ICML'25](https://proceedings.mlr.press/v267/xi25c.html) **[SVG (2502)](https://arxiv.org/abs/2502.01776)** | O | X | X | head별 spatial / temporal Q–K 연결 | head별 spatial/temporal 연결을 온라인 선택 |
-| [ICML'25](https://proceedings.mlr.press/v267/zhang25m.html) **[STA (2502)](https://arxiv.org/abs/2502.04507)** | O / X (FT) | 기본 X / FT 학습 O — dense teacher | FT만 O | 3D tile 주변의 고정 Q–K 연결 | tile 주변 고정 window + GPU tile 정렬 |
-| [ICML'25 WS](https://haozhang.ai/publication/) **[Efficient-vDiT (2502)](https://arxiv.org/abs/2502.06155)** | X | O — 학습: dense teacher | O | sampling step 수 + frame 간 Q–K 연결 | 소수 step 증류 + frame 연결 희소화·재증류 |
-| [ICML'25](https://proceedings.mlr.press/v267/zhang25ch.html) **[SpargeAttn (2502)](https://arxiv.org/abs/2502.18137)** | O (보정) | X | X | attention 내부 QK·AV block 및 AV 추가 생략 | 평균 Q/K로 QK·AV block 선별, softmax로 AV 추가 생략 |
-| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/hash/dfc310e81992d2e4cedc09ac47eff13e-Abstract-Conference.html) **[VSA (2505)](https://arxiv.org/abs/2505.13389)** | X | 기본 X / 실험 준비 O — Wan-14B; 증류 변형 O — teacher·fake-score | O | 저해상도 global attention + 선택한 원본 tile attention | coarse global attention + top-k fine attention 결합 |
-| [NeurIPS'25](https://papers.neurips.cc/paper_files/paper/2025/hash/8bd5148caced2d73cea7b6961a874a49-Abstract-Conference.html) **[SVG2 (2505)](https://arxiv.org/abs/2505.18875)** | O | X | X | 현재 Q·K cluster 사이의 연결 | Q/K clustering 후 중요한 cluster 연결만 계산 |
-| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/file/0badcb4e95306df76a719409155e46e8-Paper-Conference.pdf) **[VORTA (2505)](https://arxiv.org/abs/2505.18809)** | X (라우터) | O — 학습: dense teacher | X (라우터만 별도) | 블록 내부 attention | 학습한 router로 full/local/token 병합 attention 선택 |
 | [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/921ac785fa9edc73cacaf2664f43d234-Abstract-Conference.html) **[Astraea (2506)](https://arxiv.org/abs/2506.05096)** | O (검색) | X | X | attention·MLP의 token 출력 | 중요 token만 attention·MLP 출력 갱신, 나머지는 cache |
+
+#### Astraea
+
+- **효율화 위치:** **self-attention·cross-attention·MLP의 token별 출력 갱신.**
+
+- **기존 계산 → 대체 방식:** 모든 token 출력을 매 step 새로 계산하는 대신 중요한 token만 갱신하고, 나머지 위치에는 **이전 step의 같은 block 출력 cache**를 넣어 full sequence를 만든다. Cross-attention과 MLP는 미선택 token 계산을 직접 생략한다. Self-attention에서는 **선택한 Q 행만 계산하되 K,V는 전체 현재 token에서 계산**하므로, 갱신 token은 여전히 전체 문맥을 볼 수 있다. Token이나 frame을 영구 제거하는 방식이 아니라 갱신 빈도를 token별로 달리하는 방법이다.
+
+- **판단 기준·학습/준비:** 이전 attention의 LSE 점수, 두 계산 시점 사이 입력 token 변화량, 연속 미갱신 횟수에 대한 penalty를 결합해 순위를 매긴다. 추가 weight 학습은 없지만 총 계산 예산 아래 영상 출력 MSE를 최소화하도록 **step별 갱신 비율을 offline evolutionary search**한다.
+
+**Method 근거:** [본문 §3.2–3.3, Eq.4–7, Figure 3; 부록 self-attention pseudocode](https://arxiv.org/html/2506.05096v4)
+
+## 2. Attention 연결·토큰 축소
+
+**어떤 Q–K 연결이나 token을 계산할지**를 바꾼다. 2.1–2.3은 연결 패턴을 얻는 방식, 2.4는 token 자체의 병합, 2.5는 step 사이의 패턴·배정 재사용을 구분한다. **2.5가 저장하는 것은 출력 feature가 아니라 계산할 위치를 정하는 정보**라는 점에서 1번과 다르다.
+
+### 2.1 정해진 구조·사전 보정 패턴
+
+시공간 거리 규칙이나 사전 calibration으로 attention 패턴을 정한다. 패턴은 step·layer·head마다 다를 수 있다. CalibAtt는 이웃 query의 결과를 복사하는 경로도 결합한다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICML'25](https://proceedings.mlr.press/v267/zhang25m.html) **[STA (2502)](https://arxiv.org/abs/2502.04507)** | O / X (FT) | 기본 X / FT 학습 O — dense teacher | FT만 O | 3D tile 주변의 고정 Q–K 연결 | tile 주변 고정 window + GPU tile 정렬 |
 | [NeurIPS'25](https://papers.neurips.cc/paper_files/paper/2025/hash/18a367688479c1b08b001584218a4443-Abstract-Conference.html) **[Radial Attention (2506)](https://arxiv.org/abs/2506.19852)** | O / X (장편 FT) | X | 장편 FT만 O | frame 간 거리에 따른 Q–K 연결 밀도 | 먼 frame일수록 공간 연결을 좁히는 고정 sparse mask |
-| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/d6c4014ff8d95025aa35d831c0f81faa-Abstract-Conference.html) **[VMoBA (2506)](https://arxiv.org/abs/2506.23858)** | O / X (FT) | X | FT만 O | query별로 접근할 K/V block 선택 | query와 block 평균 key의 유사도로 K/V block routing |
-| (x) **[LiteAttention (2511)](https://arxiv.org/abs/2511.11062)** | O (보정) | X | X | attention tile의 생략 mask를 step 간 재사용 | 작은 기여도의 attention tile을 표시하고 skip-mask 재사용 |
 | [ECCV'26](https://github.com/apple-aiml-research/ml-calibatt) **[CalibAtt (2603)](https://arxiv.org/abs/2603.05503)** | O (보정) | X | X | attention 연결·query 행 | 사전 mask로 연결 축소 + 일부 query 출력을 주변에 복사 |
-| [ECCV'26](https://eccv.ecva.net/Conferences/2026/AcceptedPapers) **[SVG-EAR (2603)](https://arxiv.org/abs/2603.08982)** | O | X | X | cluster별 원본 attention / 평균값 근사 선택 | 큰 오차 block은 정확히 계산, 나머지는 평균 K/V로 보상 |
-| [ICML'26](https://icml.cc/virtual/2026/poster/66331) **[Veda (2605)](https://arxiv.org/abs/2605.30325)** | X | X (내부 dense-attn 지도) | O (scorer도 학습) | 작은 학습된 MLP가 선택한 Q–K tile 연결 | 학습한 tile scorer의 top-k 연결만 attention 계산 |
-| [NeurIPS'26](https://neurips.cc/virtual/2026/poster/153122) **[HVA (2607)](https://arxiv.org/abs/2607.03012)** | O | X | X | sparse attention용 clustering·GPU tile 낭비 | local clustering·불안정 token만 재배정·GPU tile 낭비 축소 |
 
-### DiTFastAttn
-
-- **효율화 위치:** **attention 연산 내부, denoising step 사이, CFG 두 branch 사이.**
-
-- **기존 계산 → 대체 방식:** 매 step의 full attention을 세 방식으로 줄인다. **WA-RS**는 기준 step에서 `full attention 출력 − window attention 출력`을 저장한 뒤, 이후에는 현재 window attention만 새로 계산하고 저장한 차이를 더한다. **AST**는 선택된 layer의 attention 출력 전체를 앞선 step에서 가져오고, **ASC**는 conditional branch의 attention 출력을 unconditional branch에 재사용한다. 이는 attention을 대체하는 것으로 MLP와 diffusion step 전체를 삭제하는 것은 아니다.
-
-- **판단 기준·학습/준비:** 학습 없이 calibration에서 layer·step별 후보 조합을 시험한다. 압축 전후 모델 출력 오차가 임계값 아래인 후보 중 계산을 가장 많이 줄이는 것을 greedy하게 선택하며, 허용되지 않는 위치는 full attention을 유지한다. WA-RS에는 residual 갱신 step이 필요하다.
-
-**Method 근거:** [본문 §3.2–3.5, Eq.1–2, Algorithm 1](https://arxiv.org/html/2406.08552v2)
-
-### Importance-Based Token Merging
-
-- **효율화 위치:** **선택한 diffusion layer에 들어가는 token 수.** Video 실험은 AnimateDiff의 첫·마지막 block에 적용한다.
-
-- **기존 계산 → 대체 방식:** 원래 N개 token을 각각 처리하던 layer를 **소수 destination token과 독립 token만 처리**하도록 바꾼다. 이전 step CFG 크기로 important pool을 만든 뒤 그 안에서 destination을 무작위로 뽑고, 나머지 token은 cosine similarity가 가장 높은 destination으로 평균 병합한다. 단, important pool에서 어떤 destination과도 잘 맞지 않는 token은 독립적으로 보존한다. 처리 후 destination 출력을 병합된 source 위치에 복사하여 원래 N개 위치를 복원하므로 frame을 영구 삭제하지 않는다.
-
-- **판단 기준·학습/준비:** 사전 학습 없이 merging ratio, pool 크기, destination 비율을 정한다. 초기 step에는 구조 보존을 위해 pruning 변형과 공간 분산 destination 선택을 사용한다. 본문은 video의 적용 block을 명시하지만 모든 MLP·temporal-attention에 일괄 적용했다고 명시하지 않으므로 그 범위는 단정하지 않는다.
-
-**Method 근거:** [본문 §3, §4.1; 부록 B의 early-step 처리](https://arxiv.org/html/2411.16720v2) · [공식 method 설명](https://hao-yu-wu.github.io/token_merging/)
-
-### Sparse VideoGen / SVG
-
-- **효율화 위치:** **각 attention head의 QK 및 attention-weight×V 계산 영역.**
-
-- **기존 계산 → 대체 방식:** 모든 video token 쌍을 계산하던 3D attention을 head마다 두 후보 중 하나로 제한한다. **Spatial head**는 같은 frame와 인접 frame의 token을, **temporal head**는 여러 frame의 대응 공간 위치 주변 token을 연결한다. 선택 mask 밖의 QK·AV block을 건너뛰되 token sequence와 선택된 연결의 현재 Q/K/V는 유지한다. Temporal 연결은 메모리에서 띄엄띄엄하므로 token 순서를 바꿔 연속 block으로 만든 뒤 sparse kernel을 실행하고 순서를 복구한다.
-
-- **판단 기준·학습/준비:** 현재 입력의 일부 query 행에서 full·spatial·temporal attention 출력을 실제 계산하여, full 대비 MSE가 작은 패턴을 head별로 선택한다. 따라서 고정 head 분류가 아니라 prompt·step에 반응하는 **online profiling**이다. 추가 학습은 없지만 profiling 계산과 sparsity 폭 설정이 필요하다.
-
-**Method 근거:** [본문 §3.1, §4.1–4.3, Figure 5](https://arxiv.org/html/2502.01776v2)
-
-### Sliding Tile Attention / STA
+#### Sliding Tile Attention / STA
 
 - **효율화 위치:** **self-attention의 공간·시간 연결을 GPU tile 단위로 제한.**
 
@@ -334,17 +283,49 @@ flowchart TD
 
 **Method 근거:** [본문 §3.1–3.2, Algorithm 1, Figure 5](https://arxiv.org/html/2502.04507v3)
 
-### Efficient-vDiT
+#### Radial Attention
 
-- **효율화 위치:** **denoiser 호출 횟수와 호출당 3D attention의 frame 연결.**
+- **효율화 위치:** **frame 간 거리에 따른 고정 self-attention 연결 밀도.**
 
-- **기존 계산 → 대체 방식:** 먼저 multi-step consistency distillation으로 적은 step의 denoiser를 만든다. 그 안의 full attention은 **같은 latent frame의 diagonal block + 일정 간격으로 고른 소수 global reference frame에 대한 연결**만 남기는 고정 sparse mask로 바꾼다. 따라서 모든 frame token은 계속 존재하지만 대부분의 frame 간 QK·AV 계산이 사라진다. 마지막으로 dense teacher의 attention 출력·MLP 출력과 diffusion 목적함수로 sparse student를 다시 학습해 오차를 줄인다.
+- **기존 계산 → 대체 방식:** 모든 frame 쌍을 똑같이 dense하게 계산하는 대신 **가까운 frame끼리는 넓게, 먼 frame끼리는 대응 공간 위치 주변만 좁게** 계산한다. 시간 거리가 두 배인 band로 갈수록 계산 밀도를 절반으로 줄이고, band 내부에서는 공간 diagonal 폭을 줄이다가 매우 먼 구간은 diagonal 자체를 드물게 배치한다. 첫 frame의 attention sink는 유지한다. 이는 좌표로 정해지는 mask이며 현재 attention 중요도를 매번 예측하지 않는다. 실제 kernel은 개별 원소가 아닌 128×128 block 단위로 실행한다.
 
-- **판단 기준·학습/준비:** Layer마다 유지할 reference-frame 수 후보를 사전 검색한다. 여러 sampled timestep의 hidden-state 오차를 검사해 임계값을 만족하는 sparse mask를 선택하고 추론에는 고정해 사용한다. 단순한 training-free mask 적용이 아니라 **step distillation → layer별 mask search → knowledge distillation**의 준비 과정이다.
+- **판단 기준·학습/준비:** 기본 sparse 적용은 추가 학습 없이 가능하며 초기 layer·step의 dense 유지 설정이 있다. 별도의 장편 생성 확장은 길이 분포 변화에 적응하기 위해 Q/K/V/output projection에 LoRA를 학습한다. 기본 sparsification과 long-video adaptation의 학습 여부를 분리해야 한다.
 
-**Method 근거:** [본문 §3.1–3.4, Algorithm 1, Eq.2–4](https://arxiv.org/html/2502.06155v2)
+**Method 근거:** [본문 §4.2–4.3, Eq.4–6, Figure 5; 부록 D](https://arxiv.org/html/2506.19852v2)
 
-### SpargeAttn
+#### CalibAtt
+
+- **효율화 위치:** **offline attention block mask + 공간적으로 반복되는 query 행 출력.**
+
+- **기존 계산 → 대체 방식:** 일반 head에서는 모든 attention block 대신 **사전에 저장한 step·layer·head별 mask의 block만** 현재 Q/K/V로 계산한다. 공간 행별 attention이 반복되는 것으로 판정한 head는 별도 경로를 쓴다. 각 frame에서 소수 anchor query 행만 **전체 K/V에 대해** 계산하고, 그 출력을 가까운 공간 행으로 복사한다. 전자는 연결을 줄이고 후자는 계산할 query 수를 줄이는 방식이며, 단순한 이전-step 출력 cache와는 다르다.
+
+- **판단 기준·학습/준비:** Calibration prompt들에서 full attention을 측정해 query block별 누적 attention mass를 보존하는 mask를 만든 뒤, prompt 간 선택 빈도로 합의 mask를 저장한다. Anchor-row 경로는 attention map의 cosine similarity로 판정한다. 추가 weight 학습이나 inference-time routing은 없지만 **model·해상도·step 설정에 맞는 offline calibration과 dictionary 저장**이 필요하다.
+
+**Method 근거:** [본문 §3.2–3.4, Eq.5–10, Figure 5](https://arxiv.org/html/2603.05503)
+
+### 2.2 별도 선택기 학습 없이 현재 입력에서 연결 선택·근사
+
+현재 Q·K의 통계, 작은 probe 또는 clustering으로 중요한 연결을 찾는다. SVG·SpargeAttn·SVG2·VMoBA는 선택 방식이 다르고, SVG-EAR는 미선택 영역의 기여를 평균 K/V로 보상한다. 선택할 위치를 찾는 계산도 추론 비용에 포함된다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICML'25](https://proceedings.mlr.press/v267/xi25c.html) **[SVG (2502)](https://arxiv.org/abs/2502.01776)** | O | X | X | head별 spatial / temporal Q–K 연결 | head별 spatial/temporal 연결을 온라인 선택 |
+| [ICML'25](https://proceedings.mlr.press/v267/zhang25ch.html) **[SpargeAttn (2502)](https://arxiv.org/abs/2502.18137)** | O (보정) | X | X | attention 내부 QK·AV block 및 AV 추가 생략 | 평균 Q/K로 QK·AV block 선별, softmax로 AV 추가 생략 |
+| [NeurIPS'25](https://papers.neurips.cc/paper_files/paper/2025/hash/8bd5148caced2d73cea7b6961a874a49-Abstract-Conference.html) **[SVG2 (2505)](https://arxiv.org/abs/2505.18875)** | O | X | X | 현재 Q·K cluster 사이의 연결 | Q/K clustering 후 중요한 cluster 연결만 계산 |
+| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/d6c4014ff8d95025aa35d831c0f81faa-Abstract-Conference.html) **[VMoBA (2506)](https://arxiv.org/abs/2506.23858)** | O / X (FT) | X | FT만 O | query별로 접근할 K/V block 선택 | query와 block 평균 key의 유사도로 K/V block routing |
+| [ECCV'26](https://eccv.ecva.net/Conferences/2026/AcceptedPapers) **[SVG-EAR (2603)](https://arxiv.org/abs/2603.08982)** | O | X | X | cluster별 원본 attention / 평균값 근사 선택 | 큰 오차 block은 정확히 계산, 나머지는 평균 K/V로 보상 |
+
+#### Sparse VideoGen / SVG
+
+- **효율화 위치:** **각 attention head의 QK 및 attention-weight×V 계산 영역.**
+
+- **기존 계산 → 대체 방식:** 모든 video token 쌍을 계산하던 3D attention을 head마다 두 후보 중 하나로 제한한다. **Spatial head**는 같은 frame와 인접 frame의 token을, **temporal head**는 여러 frame의 대응 공간 위치 주변 token을 연결한다. 선택 mask 밖의 QK·AV block을 건너뛰되 token sequence와 선택된 연결의 현재 Q/K/V는 유지한다. Temporal 연결은 메모리에서 띄엄띄엄하므로 token 순서를 바꿔 연속 block으로 만든 뒤 sparse kernel을 실행하고 순서를 복구한다.
+
+- **판단 기준·학습/준비:** 현재 입력의 일부 query 행에서 full·spatial·temporal attention 출력을 실제 계산하여, full 대비 MSE가 작은 패턴을 head별로 선택한다. 따라서 고정 head 분류가 아니라 prompt·step에 반응하는 **online profiling**이다. 추가 학습은 없지만 profiling 계산과 sparsity 폭 설정이 필요하다.
+
+**Method 근거:** [본문 §3.1, §4.1–4.3, Figure 5](https://arxiv.org/html/2502.01776v2)
+
+#### SpargeAttn
 
 - **효율화 위치:** FlashAttention 내부의 **QK·AV block 생략**, 남은 block 안의 **AV 추가 생략**.
 
@@ -354,19 +335,7 @@ flowchart TD
 
 **Method 근거:** [본문 §3.2–3.7, Eq.4–6](https://arxiv.org/html/2502.18137v8)
 
-### VSA
-
-- **효율화 위치:** **full self-attention을 coarse global branch와 fine sparse branch로 교체.**
-
-- **기존 계산 → 대체 방식:** Video latent를 3D cube로 나누고 cube 하나를 GPU tile 하나에 대응시킨다. **Coarse branch**는 cube별 평균 Q/K/V로 모든 cube 간 저해상도 attention을 계산한다. 여기서 query cube마다 점수가 높은 key cube를 고르면 **fine branch**가 해당 cube 쌍의 원래 token끼리만 QK·AV를 계산한다. 최종 출력은 coarse global 출력과 fine 출력을 gate로 결합하므로, coarse 계산은 mask를 고르는 데만 쓰이는 것이 아니라 생략한 영역의 global 문맥도 제공한다.
-
-- **판단 기준·학습/준비:** Cube 크기와 row별 top-k 예산을 정하고 입력마다 mask를 재계산한다. 논문은 training-from-scratch와 pretrained model의 sparse adaptation을 평가한다. Adaptation에서는 새 coarse gate를 0으로 초기화하고 dense에 가까운 상태에서 출발해 sparsity를 점진적으로 높이면서 학습한다. Few-step distillation과 함께 학습하는 변형도 제시한다.
-
-**Method 근거:** [본문 §2.2–2.4, Appendix B](https://arxiv.org/html/2505.13389v5)
-
-**분류 보충:** 외부 모델 표기는 변형에 따라 다르다. Native VSA 학습은 별도 teacher가 필수는 아니며, 논문의 adaptation 실험은 Wan-14B 합성 데이터를 사용한다. Sparse-Distill 변형은 dense real-score teacher와 fake-score 모델을 추가로 쓴다. [§3.3·Appendix C.5–C.6](https://arxiv.org/html/2505.13389v5)
-
-### Sparse VideoGen2 / SVG2
+#### Sparse VideoGen2 / SVG2
 
 - **효율화 위치:** **attention token의 순서와 query-cluster/key-cluster 연결.**
 
@@ -378,37 +347,7 @@ flowchart TD
 
 **서지 근거:** [Spotlight](https://svg-project.github.io/v2/)
 
-### VORTA
-
-- **효율화 위치:** **transformer block의 attention 종류를 step에 따라 선택.**
-
-- **기존 계산 → 대체 방식:** 매 block의 full attention을 항상 계산하는 대신 **full / 3D sliding-tile / core-set attention** 중 하나만 실행한다. Sliding branch는 local tile 연결만 계산한다. Core-set branch는 3D bucket의 중심 token과 가장 유사한 이웃들을 중심에 병합하고, 남은 작은 token 집합에서 attention을 계산한 뒤 중심 출력을 제거했던 위치로 복사해 원래 길이를 복원한다. 따라서 local 연결 생략과 attention 입력 token 압축이 별도 branch이며 이후 FFN 등의 전체 sequence 처리는 계속된다.
-
-- **판단 기준·학습/준비:** Timestep embedding을 받는 block별 linear router가 세 gate 중 최대인 branch를 고른다. 사전 준비에서 세 branch를 함께 실행한 weighted output을 dense teacher와 맞추며 **backbone은 동결하고 router만 학습**한다. Core-set의 bucket 크기·병합 수와 local window는 별도 설정값이다.
-
-**Method 근거:** [본문 §3.2–3.3, Eq.3–8, Figure 5–6; 부록 A.1](https://arxiv.org/html/2505.18809v2)
-
-### Astraea
-
-- **효율화 위치:** **self-attention·cross-attention·MLP의 token별 출력 갱신.**
-
-- **기존 계산 → 대체 방식:** 모든 token 출력을 매 step 새로 계산하는 대신 중요한 token만 갱신하고, 나머지 위치에는 **이전 step의 같은 block 출력 cache**를 넣어 full sequence를 만든다. Cross-attention과 MLP는 미선택 token 계산을 직접 생략한다. Self-attention에서는 **선택한 Q 행만 계산하되 K,V는 전체 현재 token에서 계산**하므로, 갱신 token은 여전히 전체 문맥을 볼 수 있다. Token이나 frame을 영구 제거하는 방식이 아니라 갱신 빈도를 token별로 달리하는 방법이다.
-
-- **판단 기준·학습/준비:** 이전 attention의 LSE 점수, 두 계산 시점 사이 입력 token 변화량, 연속 미갱신 횟수에 대한 penalty를 결합해 순위를 매긴다. 추가 weight 학습은 없지만 총 계산 예산 아래 영상 출력 MSE를 최소화하도록 **step별 갱신 비율을 offline evolutionary search**한다.
-
-**Method 근거:** [본문 §3.2–3.3, Eq.4–7, Figure 3; 부록 self-attention pseudocode](https://arxiv.org/html/2506.05096v4)
-
-### Radial Attention
-
-- **효율화 위치:** **frame 간 거리에 따른 고정 self-attention 연결 밀도.**
-
-- **기존 계산 → 대체 방식:** 모든 frame 쌍을 똑같이 dense하게 계산하는 대신 **가까운 frame끼리는 넓게, 먼 frame끼리는 대응 공간 위치 주변만 좁게** 계산한다. 시간 거리가 두 배인 band로 갈수록 계산 밀도를 절반으로 줄이고, band 내부에서는 공간 diagonal 폭을 줄이다가 매우 먼 구간은 diagonal 자체를 드물게 배치한다. 첫 frame의 attention sink는 유지한다. 이는 좌표로 정해지는 mask이며 현재 attention 중요도를 매번 예측하지 않는다. 실제 kernel은 개별 원소가 아닌 128×128 block 단위로 실행한다.
-
-- **판단 기준·학습/준비:** 기본 sparse 적용은 추가 학습 없이 가능하며 초기 layer·step의 dense 유지 설정이 있다. 별도의 장편 생성 확장은 길이 분포 변화에 적응하기 위해 Q/K/V/output projection에 LoRA를 학습한다. 기본 sparsification과 long-video adaptation의 학습 여부를 분리해야 한다.
-
-**Method 근거:** [본문 §4.2–4.3, Eq.4–6, Figure 5; 부록 D](https://arxiv.org/html/2506.19852v2)
-
-### VMoBA
+#### VMoBA
 
 - **효율화 위치:** **각 query가 접근할 key/value block의 routing.**
 
@@ -418,7 +357,86 @@ flowchart TD
 
 **Method 근거:** [본문 §3.1–3.4, Eq.1–4; §4.1 Implementation details, Table 1의 training-free 실험](https://arxiv.org/html/2506.23858v1)
 
-### LiteAttention
+#### SVG-EAR
+
+- **효율화 위치:** **cluster block을 exact attention과 평균값 보상으로 분기.**
+
+- **기존 계산 → 대체 방식:** SVG2식 Q/K clustering 뒤 중요 block만 남기고 나머지를 0으로 버리는 대신, 일부 block은 원래 token의 QK·AV로 계산하고 **나머지는 key/value cluster 평균으로 기여도를 근사**한다. 근사 block에서는 query와 평균 key의 logit 하나, 평균 value와 cluster 크기를 이용한 계산으로 다수 token 연산을 대체한다. 모든 query 출력은 유지되며 생략 영역도 softmax 정규화·출력에 근사적으로 참여한다.
+
+- **판단 기준·학습/준비:** 단순 attention 점수 순위가 아니라 **exact 계산을 평균 근사로 바꿀 때의 추정 오차 ÷ block 크기**가 큰 것을 예산 내에서 우선 exact 계산한다. 오차는 query centroid와 개별 key를 probing하여 추정하고 value-aware 변형도 제시한다. 추가 학습·새 weight 없이 clustering, routing, compensation을 실행한다.
+
+**Method 근거:** [본문 §4.1–4.4, Eq.3–8, Figure 3](https://arxiv.org/html/2603.08982)
+
+### 2.3 희소 attention 구조·선택기를 학습
+
+VSA는 coarse·fine attention 구조를, VORTA는 attention 방식을 고르는 router를, Veda는 tile 선택기와 backbone을 학습한다. **학습 대상이 서로 다르므로** training-free 여부와 비디오 모델 학습 여부를 따로 읽는다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/hash/dfc310e81992d2e4cedc09ac47eff13e-Abstract-Conference.html) **[VSA (2505)](https://arxiv.org/abs/2505.13389)** | X | 기본 X / 실험 준비 O — Wan-14B; 증류 변형 O — teacher·fake-score | O | 저해상도 global attention + 선택한 원본 tile attention | coarse global attention + top-k fine attention 결합 |
+| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/file/0badcb4e95306df76a719409155e46e8-Paper-Conference.pdf) **[VORTA (2505)](https://arxiv.org/abs/2505.18809)** | X (라우터) | O — 학습: dense teacher | X (라우터만 별도) | 블록 내부 attention | 학습한 router로 full/local/token 병합 attention 선택 |
+| [ICML'26](https://icml.cc/virtual/2026/poster/66331) **[Veda (2605)](https://arxiv.org/abs/2605.30325)** | X | X (내부 dense-attn 지도) | O (scorer도 학습) | 작은 학습된 MLP가 선택한 Q–K tile 연결 | 학습한 tile scorer의 top-k 연결만 attention 계산 |
+
+#### VSA
+
+- **효율화 위치:** **full self-attention을 coarse global branch와 fine sparse branch로 교체.**
+
+- **기존 계산 → 대체 방식:** Video latent를 3D cube로 나누고 cube 하나를 GPU tile 하나에 대응시킨다. **Coarse branch**는 cube별 평균 Q/K/V로 모든 cube 간 저해상도 attention을 계산한다. 여기서 query cube마다 점수가 높은 key cube를 고르면 **fine branch**가 해당 cube 쌍의 원래 token끼리만 QK·AV를 계산한다. 최종 출력은 coarse global 출력과 fine 출력을 gate로 결합하므로, coarse 계산은 mask를 고르는 데만 쓰이는 것이 아니라 생략한 영역의 global 문맥도 제공한다.
+
+- **판단 기준·학습/준비:** Cube 크기와 row별 top-k 예산을 정하고 입력마다 mask를 재계산한다. 논문은 training-from-scratch와 pretrained model의 sparse adaptation을 평가한다. Adaptation에서는 새 coarse gate를 0으로 초기화하고 dense에 가까운 상태에서 출발해 sparsity를 점진적으로 높이면서 학습한다. Few-step distillation과 함께 학습하는 변형도 제시한다.
+
+**Method 근거:** [본문 §2.2–2.4, Appendix B](https://arxiv.org/html/2505.13389v5)
+
+**분류 보충:** 외부 모델 표기는 변형에 따라 다르다. Native VSA 학습은 별도 teacher가 필수는 아니며, 논문의 adaptation 실험은 Wan-14B 합성 데이터를 사용한다. Sparse-Distill 변형은 dense real-score teacher와 fake-score 모델을 추가로 쓴다. [§3.3·Appendix C.5–C.6](https://arxiv.org/html/2505.13389v5)
+
+#### VORTA
+
+- **효율화 위치:** **transformer block의 attention 종류를 step에 따라 선택.**
+
+- **기존 계산 → 대체 방식:** 매 block의 full attention을 항상 계산하는 대신 **full / 3D sliding-tile / core-set attention** 중 하나만 실행한다. Sliding branch는 local tile 연결만 계산한다. Core-set branch는 3D bucket의 중심 token과 가장 유사한 이웃들을 중심에 병합하고, 남은 작은 token 집합에서 attention을 계산한 뒤 중심 출력을 제거했던 위치로 복사해 원래 길이를 복원한다. 따라서 local 연결 생략과 attention 입력 token 압축이 별도 branch이며 이후 FFN 등의 전체 sequence 처리는 계속된다.
+
+- **판단 기준·학습/준비:** Timestep embedding을 받는 block별 linear router가 세 gate 중 최대인 branch를 고른다. 사전 준비에서 세 branch를 함께 실행한 weighted output을 dense teacher와 맞추며 **backbone은 동결하고 router만 학습**한다. Core-set의 bucket 크기·병합 수와 local window는 별도 설정값이다.
+
+**Method 근거:** [본문 §3.2–3.3, Eq.3–8, Figure 5–6; 부록 A.1](https://arxiv.org/html/2505.18809v2)
+
+#### Veda
+
+- **효율화 위치:** **학습된 tile scorer로 full attention의 block 연결 선택.**
+
+- **기존 계산 → 대체 방식:** Q/K tile의 평균만으로 중요도를 정하던 방식 대신 **평균·최대·최소를 묶은 TripPool 통계**를 head별 작은 MLP에 넣어 tile 간 점수를 예측한다. Query tile마다 top-k key tile만 선택하고, 본 attention은 선택된 tile의 원래 token으로 수행해 나머지 QK·AV를 생략한다. Predictor는 선택을 위한 저비용 계산이고 전체 video token은 보존된다. GPU kernel은 선택 K/V tile만 메모리에서 가져와 계산과 전송을 겹친다.
+
+- **판단 기준·학습/준비:** Dense teacher의 token attention을 tile별 max-pooling한 점수로 scorer를 distillation하고, backbone은 sparse 실행에서 diffusion loss로 학습한다. Scorer로 들어가는 backbone feature에는 stop-gradient를 적용한다. 추가로 calibration에서 **layer·head별 3D tile 모양**을 같은 hardware tile 크기 안에서 검색한다. 따라서 training-free·uniform mean-pooling 방법과 구별된다.
+
+**Method 근거:** [본문 §4.1–4.3, Eq.4–9](https://arxiv.org/html/2605.30325)
+
+### 2.4 Token을 병합해 연산 입력 수 축소
+
+**비슷한 token을 합친 뒤 적은 token으로 계산한다.** 같은 token 수에서 Q–K 연결만 줄이는 sparse attention, 이전 step의 token 출력을 가져오는 Astraea와 구분한다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/papers/Wu_Importance-Based_Token_Merging_for_Efficient_Image_and_Video_Generation_ICCV_2025_paper.pdf) **[Importance Token Merging (2411)](https://arxiv.org/abs/2411.16720)** | O | X | X | 선택한 layer에 들어가는 token 수 | 중요 token을 보존하며 유사 token 병합 후 출력 복원 |
+
+#### Importance-Based Token Merging
+
+- **효율화 위치:** **선택한 diffusion layer에 들어가는 token 수.** Video 실험은 AnimateDiff의 첫·마지막 block에 적용한다.
+
+- **기존 계산 → 대체 방식:** 원래 N개 token을 각각 처리하던 layer를 **소수 destination token과 독립 token만 처리**하도록 바꾼다. 이전 step CFG 크기로 important pool을 만든 뒤 그 안에서 destination을 무작위로 뽑고, 나머지 token은 cosine similarity가 가장 높은 destination으로 평균 병합한다. 단, important pool에서 어떤 destination과도 잘 맞지 않는 token은 독립적으로 보존한다. 처리 후 destination 출력을 병합된 source 위치에 복사하여 원래 N개 위치를 복원하므로 frame을 영구 삭제하지 않는다.
+
+- **판단 기준·학습/준비:** 사전 학습 없이 merging ratio, pool 크기, destination 비율을 정한다. 초기 step에는 구조 보존을 위해 pruning 변형과 공간 분산 destination 선택을 사용한다. 본문은 video의 적용 block을 명시하지만 모든 MLP·temporal-attention에 일괄 적용했다고 명시하지 않으므로 그 범위는 단정하지 않는다.
+
+**Method 근거:** [본문 §3, §4.1; 부록 B의 early-step 처리](https://arxiv.org/html/2411.16720v2) · [공식 method 설명](https://hao-yu-wu.github.io/token_merging/)
+
+### 2.5 Step 사이 희소 패턴·cluster 배정 재사용
+
+LiteAttention은 생략할 attention tile의 mask를 재사용해 해당 QK·AV 계산을 줄인다. HVA는 cluster 배정 중 바뀔 가능성이 큰 부분만 갱신해 반복 clustering 비용을 줄인다. **저장한 출력으로 대체하는 것이 아니라, 재사용한 패턴·배정에 따라 현재 attention을 계산한다.**
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| (x) **[LiteAttention (2511)](https://arxiv.org/abs/2511.11062)** | O (보정) | X | X | attention tile의 생략 mask를 step 간 재사용 | 작은 기여도의 attention tile을 표시하고 skip-mask 재사용 |
+| [NeurIPS'26](https://neurips.cc/virtual/2026/poster/153122) **[HVA (2607)](https://arxiv.org/abs/2607.03012)** | O | X | X | sparse attention용 clustering·GPU tile 낭비 | local clustering·불안정 token만 재배정·GPU tile 낭비 축소 |
+
+#### LiteAttention
 
 - **효율화 위치:** **FlashAttention tile의 실행 여부를 denoising step 사이에 재사용.**
 
@@ -430,37 +448,7 @@ flowchart TD
 
 **서지 근거:** [공식 저장소](https://github.com/moonmath-ai/LiteAttention)
 
-### CalibAtt
-
-- **효율화 위치:** **offline attention block mask + 공간적으로 반복되는 query 행 출력.**
-
-- **기존 계산 → 대체 방식:** 일반 head에서는 모든 attention block 대신 **사전에 저장한 step·layer·head별 mask의 block만** 현재 Q/K/V로 계산한다. 공간 행별 attention이 반복되는 것으로 판정한 head는 별도 경로를 쓴다. 각 frame에서 소수 anchor query 행만 **전체 K/V에 대해** 계산하고, 그 출력을 가까운 공간 행으로 복사한다. 전자는 연결을 줄이고 후자는 계산할 query 수를 줄이는 방식이며, 단순한 이전-step 출력 cache와는 다르다.
-
-- **판단 기준·학습/준비:** Calibration prompt들에서 full attention을 측정해 query block별 누적 attention mass를 보존하는 mask를 만든 뒤, prompt 간 선택 빈도로 합의 mask를 저장한다. Anchor-row 경로는 attention map의 cosine similarity로 판정한다. 추가 weight 학습이나 inference-time routing은 없지만 **model·해상도·step 설정에 맞는 offline calibration과 dictionary 저장**이 필요하다.
-
-**Method 근거:** [본문 §3.2–3.4, Eq.5–10, Figure 5](https://arxiv.org/html/2603.05503)
-
-### SVG-EAR
-
-- **효율화 위치:** **cluster block을 exact attention과 평균값 보상으로 분기.**
-
-- **기존 계산 → 대체 방식:** SVG2식 Q/K clustering 뒤 중요 block만 남기고 나머지를 0으로 버리는 대신, 일부 block은 원래 token의 QK·AV로 계산하고 **나머지는 key/value cluster 평균으로 기여도를 근사**한다. 근사 block에서는 query와 평균 key의 logit 하나, 평균 value와 cluster 크기를 이용한 계산으로 다수 token 연산을 대체한다. 모든 query 출력은 유지되며 생략 영역도 softmax 정규화·출력에 근사적으로 참여한다.
-
-- **판단 기준·학습/준비:** 단순 attention 점수 순위가 아니라 **exact 계산을 평균 근사로 바꿀 때의 추정 오차 ÷ block 크기**가 큰 것을 예산 내에서 우선 exact 계산한다. 오차는 query centroid와 개별 key를 probing하여 추정하고 value-aware 변형도 제시한다. 추가 학습·새 weight 없이 clustering, routing, compensation을 실행한다.
-
-**Method 근거:** [본문 §4.1–4.4, Eq.3–8, Figure 3](https://arxiv.org/html/2603.08982)
-
-### Veda
-
-- **효율화 위치:** **학습된 tile scorer로 full attention의 block 연결 선택.**
-
-- **기존 계산 → 대체 방식:** Q/K tile의 평균만으로 중요도를 정하던 방식 대신 **평균·최대·최소를 묶은 TripPool 통계**를 head별 작은 MLP에 넣어 tile 간 점수를 예측한다. Query tile마다 top-k key tile만 선택하고, 본 attention은 선택된 tile의 원래 token으로 수행해 나머지 QK·AV를 생략한다. Predictor는 선택을 위한 저비용 계산이고 전체 video token은 보존된다. GPU kernel은 선택 K/V tile만 메모리에서 가져와 계산과 전송을 겹친다.
-
-- **판단 기준·학습/준비:** Dense teacher의 token attention을 tile별 max-pooling한 점수로 scorer를 distillation하고, backbone은 sparse 실행에서 diffusion loss로 학습한다. Scorer로 들어가는 backbone feature에는 stop-gradient를 적용한다. 추가로 calibration에서 **layer·head별 3D tile 모양**을 같은 hardware tile 크기 안에서 검색한다. 따라서 training-free·uniform mean-pooling 방법과 구별된다.
-
-**Method 근거:** [본문 §4.1–4.3, Eq.4–9](https://arxiv.org/html/2605.30325)
-
-### HyperVAttention / HVA
+#### HyperVAttention / HVA
 
 - **효율화 위치:** **clustering 기반 sparse attention의 준비 비용과 GPU tile 낭비.**
 
@@ -470,22 +458,20 @@ flowchart TD
 
 **Method 근거:** [본문 §2, §4.1–4.3, Eq.5–10, Algorithm 1](https://arxiv.org/html/2607.03012)
 
-## 3. 증류·소수 스텝 생성
+## 3. 소수 step 생성
 
-**주로 줄이는 것: 전체 denoiser의 호출 횟수.** 이 계열은 실제 가속 위치가 공통된다. 차이는 적은 호출로도 좋은 영상을 만들도록 teacher의 어떤 정보를 배우고 consistency·reward·adversarial·DMD 목표를 어떻게 쓰는지에 있다. 학습 중 쓰는 reward model이나 discriminator가 추론에서도 실행되는 것은 아니다.
+**전체 denoiser를 호출하는 횟수**를 줄이도록 모델을 학습한다. 아래 소분류의 차이는 호출 수를 줄이는 위치가 아니라 **적은 호출에서도 품질을 유지하는 학습 목표**다. 6번의 작은 모델 만들기와 달리 teacher·student의 신경망 크기가 같아도 가속된다.
 
-**5번과의 차이:** 여기서는 적은 denoising 반복으로도 완성된 영상을 만들도록 학습한다. Teacher와 student의 신경망 크기가 같아도 가속될 수 있다. 5번의 pruning·양자화는 주로 한 번 호출할 때의 모델·연산 비용을 줄인다. 두 방식을 함께 적용할 수도 있다. [VideoLCM §3](https://arxiv.org/html/2312.09109#S3) · [VDMini §3](https://arxiv.org/html/2411.18375#S3)
+### 3.1 Consistency 증류
+
+같은 생성 경로의 서로 다른 noise 수준에서 일관된 clean 예측을 내도록 학습해, 긴 복원 과정을 소수 호출로 대체한다. AnimateLCM은 공간·motion 모듈의 가속 학습을 분리한다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
 | (x) **[VideoLCM (2312)](https://arxiv.org/abs/2312.09109)** | X | O — 학습: diffusion teacher·EMA target | O | denoiser 호출 수·CFG 분기 | consistency 증류로 denoiser 호출 수·CFG 이중 평가 축소 |
 | [SIGGRAPH Asia'24 TC](https://github.com/G-U-N/AnimateLCM) **[AnimateLCM (2402)](https://arxiv.org/abs/2402.00769)** | X | O — 학습: image/video teacher | O | 공간·motion 모듈을 포함한 denoiser 호출 수 | 공간·motion consistency를 분리 학습해 소수 step 생성 |
-| [NeurIPS'24](https://papers.nips.cc/paper/2024/file/8a57aa8e8b57e64a42e95f7dceb0adb9-Paper-Conference.pdf) **[T2V-Turbo (2405)](https://arxiv.org/abs/2405.18750)** | X | O — 학습: teacher·image/video reward | O (LoRA) | denoiser 호출 수 | reward로 품질을 보완한 consistency 증류 |
-| [NeurIPS'24](https://proceedings.neurips.cc/paper_files/paper/2024/file/bb80772833b5e7ce85321a4fb50a66e7-Paper-Conference.pdf) **[SF-V (2406)](https://arxiv.org/abs/2406.04324)** | X | O — 학습: discriminator | O | 전체 clip 생성에 필요한 denoiser 호출을 1회로 | adversarial·reconstruction 학습으로 전체 clip을 1회 생성 |
-| [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/file/e68af7d8a44bc1964f6be4de464e38f9-Paper-Conference.pdf) **[T2V-Turbo-v2 (2410)](https://arxiv.org/abs/2410.05677)** | X | O — 학습: teacher·image/video reward | O | denoiser 호출 수·motion guidance | motion guidance와 reward를 소수 step student에 증류 |
-| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/0534abc9e6db91683d82186ef0d68202-Abstract-Conference.html) **[rCM (2510)](https://arxiv.org/abs/2510.08431)** | X | O — 학습: teacher·fake-score | O | denoiser 호출 수 | continuous-time consistency + DMD 정규화로 1–4회 생성 |
 
-### VideoLCM
+#### VideoLCM
 
 - **효율화 위치:** 전체 video denoiser의 반복 호출 수, CFG의 조건·무조건 이중 평가
 
@@ -495,7 +481,7 @@ flowchart TD
 
 **Method 근거:** [§3.1–3.2, Eqs. 2–5; §4.1](https://arxiv.org/html/2312.09109#S3)
 
-### AnimateLCM
+#### AnimateLCM
 
 - **효율화 위치:** video denoising 반복 수; 공간·motion 가속 모듈의 학습 분리
 
@@ -505,7 +491,16 @@ flowchart TD
 
 **Method 근거:** [§3.1–3.2, Fig. 1](https://arxiv.org/html/2402.00769#S3)
 
-### T2V-Turbo
+### 3.2 Consistency 증류 + reward 지도
+
+Consistency 학습에 이미지·비디오 reward를 더해 품질을 보완한다. Reward model은 학습용이며 추론 중 후보를 채점하거나 스킵 여부를 결정하지 않는다. v2는 motion guidance도 학생에 증류한다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [NeurIPS'24](https://papers.nips.cc/paper/2024/file/8a57aa8e8b57e64a42e95f7dceb0adb9-Paper-Conference.pdf) **[T2V-Turbo (2405)](https://arxiv.org/abs/2405.18750)** | X | O — 학습: teacher·image/video reward | O (LoRA) | denoiser 호출 수 | reward로 품질을 보완한 consistency 증류 |
+| [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/file/e68af7d8a44bc1964f6be4de464e38f9-Paper-Conference.pdf) **[T2V-Turbo-v2 (2410)](https://arxiv.org/abs/2410.05677)** | X | O — 학습: teacher·image/video reward | O | denoiser 호출 수·motion guidance | motion guidance와 reward를 소수 step student에 증류 |
+
+#### T2V-Turbo
 
 - **효율화 위치:** 전체 video denoiser의 sampling loop
 
@@ -515,17 +510,7 @@ flowchart TD
 
 **Method 근거:** [§2; §3.1–3.3; §4 도입부](https://arxiv.org/html/2405.18750#S3)
 
-### SF-V
-
-- **효율화 위치:** image-to-video UNet의 전체 denoising loop
-
-- **기존 계산 → 대체 방식:** SVD가 입력 이미지 조건 아래 noisy video latent를 반복 갱신한다 → 같은 이미지 조건과 noise에서 전체 clip의 clean latent를 **한 번의 generator forward**로 예측한 뒤 VAE decode한다. 한 번에 한 frame씩 생성하는 autoregressive 방식이 아니라, 한 번의 video denoiser 실행으로 clip을 만드는 방식이다.
-
-- **판단 기준·학습/준비:** 사전학습 SVD로 generator와 discriminator backbone을 초기화하고 reconstruction+adversarial loss로 generator를 학습한다. Discriminator는 frozen UNet encoder의 각 downsampling block 뒤에 spatial·temporal head를 붙여 프레임 품질과 시간 일관성을 평가하며, 이 head들과 discriminator 계산은 추론에 남지 않는다.
-
-**Method 근거:** [§3.2–3.3, Fig. 2](https://arxiv.org/html/2406.04324#S3)
-
-### T2V-Turbo-v2
+#### T2V-Turbo-v2
 
 - **효율화 위치:** consistency student의 sampling loop; 비싼 motion guidance의 사전 증류
 
@@ -535,7 +520,15 @@ flowchart TD
 
 **Method 근거:** [§3.1–3.2, Eqs. 8–11; §4.1 Table 1](https://arxiv.org/html/2410.05677#S3)
 
-### rCM
+### 3.3 Consistency 학습 + 생성 분포 보정
+
+rCM은 continuous-time consistency와 DMD를 함께 학습한다. DMD는 학생의 생성 분포를 teacher 쪽으로 맞추는 추가 목표이며, 중간 feature cache를 학습하는 방식이 아니다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/0534abc9e6db91683d82186ef0d68202-Abstract-Conference.html) **[rCM (2510)](https://arxiv.org/abs/2510.08431)** | X | O — 학습: teacher·fake-score | O | denoiser 호출 수 | continuous-time consistency + DMD 정규화로 1–4회 생성 |
+
+#### rCM
 
 - **효율화 위치:** 전체 denoiser의 평가 횟수
 
@@ -545,28 +538,39 @@ flowchart TD
 
 **Method 근거:** [§3.1–3.2; §4.1–4.2, Eqs. 6–7](https://arxiv.org/html/2510.08431#S4)
 
+### 3.4 Adversarial 학습으로 전체 clip을 1회 생성
+
+SF-V는 reconstruction·adversarial 학습으로 **전체 clip을 한 번의 generator 실행으로 생성**한다. 4.2의 AAPT는 한 번에 다음 latent frame을 만들므로, “1회 생성”의 단위가 다르다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [NeurIPS'24](https://proceedings.neurips.cc/paper_files/paper/2024/file/bb80772833b5e7ce85321a4fb50a66e7-Paper-Conference.pdf) **[SF-V (2406)](https://arxiv.org/abs/2406.04324)** | X | O — 학습: discriminator | O | 전체 clip 생성에 필요한 denoiser 호출을 1회로 | adversarial·reconstruction 학습으로 전체 clip을 1회 생성 |
+
+#### SF-V
+
+- **효율화 위치:** image-to-video UNet의 전체 denoising loop
+
+- **기존 계산 → 대체 방식:** SVD가 입력 이미지 조건 아래 noisy video latent를 반복 갱신한다 → 같은 이미지 조건과 noise에서 전체 clip의 clean latent를 **한 번의 generator forward**로 예측한 뒤 VAE decode한다. 한 번에 한 frame씩 생성하는 autoregressive 방식이 아니라, 한 번의 video denoiser 실행으로 clip을 만드는 방식이다.
+
+- **판단 기준·학습/준비:** 사전학습 SVD로 generator와 discriminator backbone을 초기화하고 reconstruction+adversarial loss로 generator를 학습한다. Discriminator는 frozen UNet encoder의 각 downsampling block 뒤에 spatial·temporal head를 붙여 프레임 품질과 시간 일관성을 평가하며, 이 head들과 discriminator 계산은 추론에 남지 않는다.
+
+**Method 근거:** [§3.2–3.3, Fig. 2](https://arxiv.org/html/2406.04324#S3)
+
 ## 4. 자기회귀·스트리밍 생성
 
-**주로 바꾸는 것: 전체 clip을 함께 생성하는 절차를 현재 frame/chunk만 생성하는 절차로 전환.** Few-step 생성과 과거 문맥 KV 재사용이 함께 쓰인다. 과거 clean chunk의 KV를 유지하는 것과 현재 noisy chunk의 출력을 denoising step 사이에 재사용하는 것은 다르다. 첫 chunk가 나오는 지연시간, 최종 전체 영상 시간, 초당 처리량도 구분해야 한다.
+**앞 frame/chunk를 완성 → 과거 문맥의 KV 저장 → 다음 frame/chunk 생성**을 반복한다. 과거 문맥의 KV를 재사용하는 것은 1번의 denoising step 간 출력 재사용과 다르다. 앞부분을 먼저 표시할 수 있지만, 순차 생성 자체가 전체 연산량 감소를 보장하지는 않는다.
 
-### 전체 clip 생성과 chunk별 생성의 차이
+### 4.1 각 chunk를 소수 denoising step으로 생성
 
-- **일반적인 양방향 video diffusion:** 모든 frame의 noisy latent를 함께 넣고 전체 영상을 여러 denoising step에 걸쳐 다듬는다. 앞 frame도 뒤 frame의 정보에 의존하므로 앞부분만 먼저 확정하기 어렵다.
-- **자기회귀 video diffusion:** 첫 chunk를 noise에서 완성 → 완성된 과거 chunk의 문맥을 저장 → 그 문맥을 보며 다음 chunk를 noise에서 완성 → 반복한다. Chunk는 작은 frame 묶음이고, 각 chunk 안에서는 다시 denoising step을 수행한다.
-- **KV cache의 역할:** 완성된 과거 chunk의 attention key/value를 저장해 다음 chunk에서 다시 만들지 않는다. 현재 noisy chunk의 값이 조금 변한다고 과거 출력을 대신 넣는 1번의 step cache와 다른 재사용이다.
-- **스트리밍의 이점:** 첫 chunk가 끝나면 전체 영상이 끝나기 전에 표시할 수 있고, 생성 도중 들어온 조건을 다음 chunk에 반영할 수 있는 구조가 된다. 실제 제어 지원은 모델에 따라 다르며, 순차 생성 자체가 전체 생성 비용 감소를 자동으로 보장하지는 않는다.
-- **3번과의 관계:** 현재 chunk를 적은 denoising step으로 만드는 학습을 결합할 수 있다. CausVid의 4-step은 chunk마다 수행하는 denoising 횟수이며, 영상 전체의 forward가 네 번뿐이라는 뜻은 아니다. Self Forcing의 주된 학습 변경은 자신의 생성 history를 보고 다음 chunk를 만들도록 훈련하는 것이다.
-
-근거: [CausVid §4.4, Algorithm 2](https://arxiv.org/html/2412.07772#S4.SS4) · [Self Forcing §3.2–3.4](https://arxiv.org/html/2506.08009#S3)
+현재 chunk 안에는 denoising 반복이 남고, 완성된 과거 chunk의 KV를 다음 생성에 사용한다. 예를 들어 CausVid의 4-step은 **chunk마다** 수행하는 횟수다. 세 방법은 causal 증류, 자기 생성 history를 사용하는 학습, consistency·DMD의 결합 순서가 다르다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
 | [CVPR'25](https://openaccess.thecvf.com/content/CVPR2025/papers/Yin_From_Slow_Bidirectional_to_Fast_Autoregressive_Video_Diffusion_Models_CVPR_2025_paper.pdf) **[CausVid (2412)](https://arxiv.org/abs/2412.07772)** | X | O — 학습: teacher·fake-score | O | 현재 chunk denoiser·과거 KV | causal·소수 step 증류 + 완성된 chunk의 KV 재사용 |
 | [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/hash/f4823f831af67a3ef15e41a85434422a-Abstract-Conference.html) **[Self Forcing (2506)](https://arxiv.org/abs/2506.08009)** | X | O — 학습: teacher·fake-score 또는 GAN discriminator | O | few-step causal 생성 + rolling history KV | 자기 rollout 기반 few-step 학습 + rolling KV cache |
-| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/file/3a9468a918fc65dc9ce7b7bd99f4f0ef-Paper-Conference.pdf) **[AAPT (2506)](https://arxiv.org/abs/2506.09350)** | X | O — 학습: teacher·discriminator | O | 다음 latent frame 생성·clean context 재평가 | 다음 frame을 1회 생성 + 이전 clean 입력 재활용·제한 KV |
 | (x) **[Causal-rCM (2606)](https://arxiv.org/abs/2606.25473)** | X | O — 학습: teacher·fake-score | O | 현재 chunk denoiser·과거 KV | causal 적응 → consistency 증류 → self-forcing DMD |
 
-### CausVid
+#### CausVid
 
 - **효율화 위치:** clip 전체의 양방향 denoising → chunk별 causal denoising, history KV 재계산
 
@@ -576,7 +580,7 @@ flowchart TD
 
 **Method 근거:** [§4.1–4.4, Algorithm 2; §5 설정](https://arxiv.org/html/2412.07772#S4)
 
-### Self Forcing
+#### Self Forcing
 
 - **효율화 위치:** few-step causal 생성의 history KV; 긴 video의 sliding-window 중복 계산
 
@@ -586,17 +590,7 @@ flowchart TD
 
 **Method 근거:** [§3.2–3.4, Algorithms 1–2](https://arxiv.org/html/2506.08009#S3)
 
-### AAPT
-
-- **효율화 위치:** per-latent-frame 생성; clean-context 재평가; 제한된 history attention
-
-- **기존 계산 → 대체 방식:** Bidirectional video DiT를 block-causal generator로 바꾸고, **직전 clean latent frame을 새 noise·control과 channel 방향으로 concat**하여 다음 latent frame 전체를 한 번에 출력한다. 이 input recycling 때문에 one-step diffusion forcing의 noisy-frame 생성 후 clean-frame KV용 추가 forward가 필요 없으며, 각 생성 pass의 과거 KV를 재사용하고 최근 N frame+첫 frame+text로 attention 범위를 제한한다.
-
-- **판단 기준·학습/준비:** Diffusion adaptation → consistency distillation 초기화 → 실제 생성 결과를 다시 입력하는 student-forcing adversarial training의 세 단계다. Cache는 이 recycled-input pass에서 얻은 상태이며, CausVid의 별도 clean-pass cache와 동일한 구성으로 설명하면 안 된다.
-
-**Method 근거:** [§2.1–2.2, Figs. 1–2](https://arxiv.org/html/2506.09350#S2)
-
-### Causal-rCM
+#### Causal-rCM
 
 - **효율화 위치:** few-step autoregressive denoising; 학습 시 clean-context/noisy-target 처리
 
@@ -606,33 +600,39 @@ flowchart TD
 
 **Method 근거:** [§3.1–3.1.2, Fig. 4, Eqs. 8–11](https://arxiv.org/html/2606.25473#S3)
 
-## 5. 양자화·모델 압축·통합 가속·시스템
+### 4.2 다음 latent frame을 1회 생성하고 clean 입력 재활용
 
-**한 가지 중복 제거 원리로 묶기 어려운 계열.** 양자화는 곱셈·메모리의 정밀도, pruning은 신경망 크기, autoencoder는 latent 크기와 복원 연산을 바꾼다. GPU 병렬화는 계산을 나눠 지연시간을 줄이는 방법이고, 통합 가속은 여러 기법을 결합한다. 따라서 아래 항목은 각각 어느 부품을 바꿨는지를 중심으로 읽는다.
+AAPT는 다음 latent frame을 한 번에 생성하며, 이전 clean 출력을 다음 입력에 포함해 별도 clean-context 재평가를 줄인다. 전체 영상은 frame 순서대로 여러 번 실행해 완성한다.
 
-**이 절 자체도 여러 축의 묶음이다.** 아래처럼 구분하면 3번과의 차이가 더 명확하다.
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/file/3a9468a918fc65dc9ce7b7bd99f4f0ef-Paper-Conference.pdf) **[AAPT (2506)](https://arxiv.org/abs/2506.09350)** | X | O — 학습: teacher·discriminator | O | 다음 latent frame 생성·clean context 재평가 | 다음 frame을 1회 생성 + 이전 clean 입력 재활용·제한 KV |
 
-| 5번 내부 소분류 | 논문 | 무엇을 줄이거나 바꾸는가 |
-|---|---|---|
-| 저정밀 연산·양자화 | ViDiT-Q, QVD, SageAttention2, Q-VDiT | 반복 횟수보다 곱셈·저장·전송에 쓰는 비트 수와 양자화 오차 처리 |
-| 모델·latent 표현 축소 | VDMini, H3AE | 실행하는 블록/channel 또는 처리하는 latent 크기, VAE 복원 비용 |
-| 다중 GPU 실행 | xDiT | token·layer·CFG 분기의 배치와 통신 대기; latency 감소와 총 연산량 감소는 구분 |
-| 여러 가속 축의 통합 | TurboDiffusion | 3번 소수 step 증류와 2번 희소 attention, 저정밀 연산 등을 결합 |
+#### AAPT
 
-**학습 여부가 경계는 아니다.** 3번도 5번 일부도 학습하지만, 3번은 적은 반복으로 생성하는 능력을, VDMini 같은 5번 방법은 작은 신경망으로 같은 역할을 수행하는 능력을 학습한다. [VideoLCM](https://arxiv.org/html/2312.09109#S3) · [VDMini](https://arxiv.org/html/2411.18375#S3.SS2) · [TurboDiffusion](https://arxiv.org/html/2512.16093#S1)
+- **효율화 위치:** per-latent-frame 생성; clean-context 재평가; 제한된 history attention
+
+- **기존 계산 → 대체 방식:** Bidirectional video DiT를 block-causal generator로 바꾸고, **직전 clean latent frame을 새 noise·control과 channel 방향으로 concat**하여 다음 latent frame 전체를 한 번에 출력한다. 이 input recycling 때문에 one-step diffusion forcing의 noisy-frame 생성 후 clean-frame KV용 추가 forward가 필요 없으며, 각 생성 pass의 과거 KV를 재사용하고 최근 N frame+첫 frame+text로 attention 범위를 제한한다.
+
+- **판단 기준·학습/준비:** Diffusion adaptation → consistency distillation 초기화 → 실제 생성 결과를 다시 입력하는 student-forcing adversarial training의 세 단계다. Cache는 이 recycled-input pass에서 얻은 상태이며, CausVid의 별도 clean-pass cache와 동일한 구성으로 설명하면 안 된다.
+
+**Method 근거:** [§2.1–2.2, Figs. 1–2](https://arxiv.org/html/2506.09350#S2)
+
+## 5. 저정밀 연산·양자화
+
+**계산·저장에 사용하는 비트 수**를 줄인다. 같은 호출 횟수·연결 구조에서도 가속될 수 있으며, 실제 속도는 저정밀 연산을 지원하는 kernel과 하드웨어에 달려 있다.
+
+### 5.1 Denoiser의 layer·feature 양자화
+
+ViDiT-Q·QVD·Q-VDiT는 모델의 가중치·activation 범위를 낮은 정밀도에 맞추고 양자화 오차를 보정한다. 보정 통계·설정 검색만 하는 방법과 보정 모듈을 gradient로 학습하는 방법을 구분한다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
 | [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/hash/a4a1ee071ce0fe63b83bce507c9dc4d7-Abstract-Conference.html) **[ViDiT-Q (2406)](https://arxiv.org/abs/2406.02540)** | O (보정·검색) | W4A8 탐색 시 O — 준비: CLIP·DOVER·RAFT | X | projection·FFN 등 linear layer의 정밀도 | linear 저비트화 + outlier 분산·민감 구간 정밀도 보존 |
 | [ACM MM'24](https://arxiv.org/abs/2407.11585) **[QVD (2407)](https://arxiv.org/abs/2407.11585)** | O (보정·검색) | X | X | UNet 양자화, 특히 denoising timestep feature | timestep feature의 log 양자화 + channel 범위 보정 |
-| (x) **[xDiT (2411)](https://arxiv.org/abs/2411.01738)** | O | X | X | token·layer·CFG 분기의 GPU 배치·통신 | token·layer·CFG 분기를 다중 GPU로 분할, 통신·계산 중첩 |
-| [ICML'25](https://proceedings.mlr.press/v267/zhang25ae.html) **[SageAttention2 (2411)](https://arxiv.org/abs/2411.10958)** | O | X | X | attention 내부 QK·PV 행렬곱의 정밀도 | QK는 INT4, PV는 FP8로 계산하고 outlier·누산 오차 보정 |
-| [ACM MM'25](https://sites.google.com/site/yimingwu0/home) **[VDMini (2411)](https://arxiv.org/abs/2411.18375)** | X | O — 학습: teacher·discriminator; T2V는 reward도 사용 | O (생성기·VAE) | denoiser 블록 수 + VAE decoder 구조 | 덜 중요한 블록·VAE channel 제거 후 feature·motion 증류 |
-| (x) **[H3AE (2504)](https://arxiv.org/abs/2504.10567)** | X | X (기본 방법) | O (AE·latent용 DiT) | 시공간 latent 압축률 + autoencoder 연산 | latent 시공간 압축률 확대 + 저비용 AE 구조 |
 | [ICML'25](https://proceedings.mlr.press/v267/feng25q.html) **[Q-VDiT (2505)](https://arxiv.org/abs/2505.22167)** | X (보정학습) | O — 보정: 원본 FP teacher | 보정만 (quantizer·TQE) | linear 양자화 + 작은 residual 오차 보정 | linear 저비트화 + rank-1 오차 보정·frame 관계 증류 |
-| (x) **[TurboDiffusion (2512)](https://arxiv.org/abs/2512.16093)** | X | O — 학습: rCM teacher·fake-score | O | sampling step + sparse attention + 저정밀 kernel | rCM 소수 step + sparse/linear attention + 저정밀 kernel |
 
-### ViDiT-Q
+#### ViDiT-Q
 
 - **효율화 위치:** DiT projection·FFN 등의 **linear layer** weight/activation 정밀도
 
@@ -644,7 +644,7 @@ flowchart TD
 
 **분류 보충:** W4A8 mixed-precision 탐색은 CLIP·DOVER·RAFT 기반 점수를 실제 bit 배정의 기준으로 사용하므로, 이 설정은 준비 단계의 외부 모델 사용으로 표시했다. Backbone이나 별도 보정 모듈을 gradient로 학습하지는 않는다. [§4.3·§5.1·Appendix E.3](https://arxiv.org/html/2406.02540v3#S4.SS3)
 
-### QVD
+#### QVD
 
 - **효율화 위치:** UNet 기반 VDM의 weight/activation 양자화; denoising-timestep embedding 보존
 
@@ -654,17 +654,25 @@ flowchart TD
 
 **Method 근거:** [§3.3; §4.1–4.2, Eqs. 11–15](https://arxiv.org/html/2407.11585v2#S4)
 
-### xDiT
+#### Q-VDiT
 
-- **효율화 위치:** denoiser의 token·layer·CFG branch를 여러 GPU에 배치; 통신 대기
+- **효율화 위치:** video DiT의 linear weight/activation; 양자화 오차 보정
 
-- **기존 계산 → 대체 방식:** 한 GPU가 모든 token/layer와 CFG 두 branch를 계산한다 → sequence parallel은 token을 나누고 Ulysses all-to-all로 head를 분배하거나 Ring으로 KV block을 교환하며, CFG 두 branch도 GPU group에 나눠 실행 후 합친다. PipeFusion은 연속 layer와 latent patch를 동시에 분할하여 pipeline을 만들고, 아직 도착하지 않은 patch context에는 이전 denoising step의 activation을 사용하여 통신과 계산을 겹친다.
+- **기존 계산 → 대체 방식:** FP linear $XW^\top$를 quantized activation·weight의 matmul로 바꾸되, 출력에 작은 rank-1 residual을 더한다. TQE는 quantized 입력에 frame별 token scaling $\mathcal M_i$를 적용한 뒤 두 벡터 $\alpha,\beta$로 residual을 계산하여, 모든 weight를 고정밀로 되돌리지 않고 token·feature 차원의 오차를 보정한다.
 
-- **판단 기준·학습/준비:** 모델 재학습 없이 병렬도를 hardware topology에 맞춰 구성한다. SP·CFG 병렬화는 주로 더 많은 GPU로 같은 일을 나눠 latency를 줄이므로 전체 FLOPs 감소와 같지 않으며, PipeFusion에는 인접 step activation의 근사가 들어간다.
+- **판단 기준·학습/준비:** Weight channel-wise·activation dynamic token-wise quantization을 사용하며, post-training calibration에서 quantizer와 TQE 파라미터를 최적화한다. TMD는 단순 출력 MSE에 frame 간 관계분포의 KL loss를 더하는 **학습 지도**이고, sampling step 단축이나 runtime frame matching 계산은 아니다.
 
-**Method 근거:** [§4.1.1–4.2; §5.1](https://arxiv.org/html/2411.01738#S4)
+**Method 근거:** [§3.2–3.3, Eqs. 7–15; Appendix B](https://arxiv.org/html/2505.22167v1#S3)
 
-### SageAttention2
+### 5.2 Attention 내부 행렬곱의 저정밀 kernel
+
+SageAttention2는 attention의 QK·PV 곱셈 자체를 저정밀로 수행한다. 연결을 제거하는 2번과 달리 **같은 연결의 연산 정밀도**를 바꾼다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICML'25](https://proceedings.mlr.press/v267/zhang25ae.html) **[SageAttention2 (2411)](https://arxiv.org/abs/2411.10958)** | O | X | X | attention 내부 QK·PV 행렬곱의 정밀도 | QK는 INT4, PV는 FP8로 계산하고 outlier·누산 오차 보정 |
+
+#### SageAttention2
 
 - **효율화 위치:** attention 내부의 $QK^\top$, softmax 후 $PV$ 행렬곱
 
@@ -674,7 +682,19 @@ flowchart TD
 
 **Method 근거:** [§3.1–3.4, Fig. 3](https://arxiv.org/html/2411.10958#S3)
 
-### VDMini
+## 6. 모델·latent 크기 축소
+
+3번은 **몇 번 호출하는가**, 이 절은 **한 번 호출할 때 얼마나 큰 모델·표현을 처리하는가**를 바꾼다. 증류를 쓰더라도 작은 모델의 품질 회복이 목적이면 여기에 분류했다.
+
+### 6.1 신경망 블록·channel 제거
+
+VDMini는 denoiser와 VAE에서 구조를 줄이고 증류로 품질을 회복한다. 1번의 일시적인 계산 생략과 달리 추론에 사용하는 모델 자체가 작아진다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ACM MM'25](https://sites.google.com/site/yimingwu0/home) **[VDMini (2411)](https://arxiv.org/abs/2411.18375)** | X | O — 학습: teacher·discriminator; T2V는 reward도 사용 | O (생성기·VAE) | denoiser 블록 수 + VAE decoder 구조 | 덜 중요한 블록·VAE channel 제거 후 feature·motion 증류 |
+
+#### VDMini
 
 - **효율화 위치:** denoiser의 block 수; VAE decoder의 layer/channel 수
 
@@ -684,7 +704,15 @@ flowchart TD
 
 **Method 근거:** [§3.2–3.3, Figs. 1–2](https://arxiv.org/html/2411.18375#S3)
 
-### H3AE
+### 6.2 영상 latent 압축률·autoencoder 구조 변경
+
+H3AE는 영상의 시공간 압축률을 높여 denoiser가 처리하는 latent를 줄이고 AE 연산도 가볍게 만든다. 생성 중 비슷한 token을 합치는 2.4와 달리, 영상 표현과 이를 처리하는 모델을 학습 단계부터 바꾼다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| (x) **[H3AE (2504)](https://arxiv.org/abs/2504.10567)** | X | X (기본 방법) | O (AE·latent용 DiT) | 시공간 latent 압축률 + autoencoder 연산 | latent 시공간 압축률 확대 + 저비용 AE 구조 |
+
+#### H3AE
 
 - **효율화 위치:** video latent의 시공간 token 수; VAE encoder/decoder
 
@@ -696,17 +724,66 @@ flowchart TD
 
 **서지 근거:** [저자 홈페이지의 Preprint 표기](https://wuyushuwys.github.io/)
 
-### Q-VDiT
+## 7. 다중 GPU 실행
 
-- **효율화 위치:** video DiT의 linear weight/activation; 양자화 오차 보정
+**계산을 여러 GPU로 나누고 통신과 계산을 겹쳐 지연시간을 줄인다.** 총 연산량·GPU 사용량 감소와는 구분한다. xDiT의 PipeFusion에는 이전 step activation을 활용하는 근사도 포함되지만, 주된 기여는 여러 병렬화 방식의 구성이다.
 
-- **기존 계산 → 대체 방식:** FP linear $XW^\top$를 quantized activation·weight의 matmul로 바꾸되, 출력에 작은 rank-1 residual을 더한다. TQE는 quantized 입력에 frame별 token scaling $\mathcal M_i$를 적용한 뒤 두 벡터 $\alpha,\beta$로 residual을 계산하여, 모든 weight를 고정밀로 되돌리지 않고 token·feature 차원의 오차를 보정한다.
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| (x) **[xDiT (2411)](https://arxiv.org/abs/2411.01738)** | O | X | X | token·layer·CFG 분기의 GPU 배치·통신 | token·layer·CFG 분기를 다중 GPU로 분할, 통신·계산 중첩 |
 
-- **판단 기준·학습/준비:** Weight channel-wise·activation dynamic token-wise quantization을 사용하며, post-training calibration에서 quantizer와 TQE 파라미터를 최적화한다. TMD는 단순 출력 MSE에 frame 간 관계분포의 KL loss를 더하는 **학습 지도**이고, sampling step 단축이나 runtime frame matching 계산은 아니다.
+### xDiT
 
-**Method 근거:** [§3.2–3.3, Eqs. 7–15; Appendix B](https://arxiv.org/html/2505.22167v1#S3)
+- **효율화 위치:** denoiser의 token·layer·CFG branch를 여러 GPU에 배치; 통신 대기
 
-### TurboDiffusion
+- **기존 계산 → 대체 방식:** 한 GPU가 모든 token/layer와 CFG 두 branch를 계산한다 → sequence parallel은 token을 나누고 Ulysses all-to-all로 head를 분배하거나 Ring으로 KV block을 교환하며, CFG 두 branch도 GPU group에 나눠 실행 후 합친다. PipeFusion은 연속 layer와 latent patch를 동시에 분할하여 pipeline을 만들고, 아직 도착하지 않은 patch context에는 이전 denoising step의 activation을 사용하여 통신과 계산을 겹친다.
+
+- **판단 기준·학습/준비:** 모델 재학습 없이 병렬도를 hardware topology에 맞춰 구성한다. SP·CFG 병렬화는 주로 더 많은 GPU로 같은 일을 나눠 latency를 줄이므로 전체 FLOPs 감소와 같지 않으며, PipeFusion에는 인접 step activation의 근사가 들어간다.
+
+**Method 근거:** [§4.1.1–4.2; §5.1](https://arxiv.org/html/2411.01738#S4)
+
+## 8. 여러 효율화 기법의 결합
+
+**서로 다른 계산 위치를 함께 줄이는 설계**를 별도로 모았다. 결합하는 축을 구분해 읽어야 “캐싱” 또는 “증류” 하나로 설명할 때 생기는 혼동을 피할 수 있다.
+
+### 8.1 Attention의 공간·step·CFG 중복을 함께 축소
+
+DiTFastAttn은 현재 attention의 window 희소화, step 사이 attention 재사용, CFG 분기 사이 재사용을 함께 선택한다. **Sampling 횟수 자체를 줄이는 증류와는 구분한다.**
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [NeurIPS'24](https://proceedings.neurips.cc/paper_files/paper/2024/file/0267925e3c276e79189251585b4100bf-Paper-Conference.pdf) **[DiTFastAttn (2406)](https://arxiv.org/abs/2406.08552)** | O (검색) | X | X | attention의 공간·step·CFG 분기 중복 | window attention + 잔차 보상·step/CFG 간 출력 재사용 |
+
+#### DiTFastAttn
+
+- **효율화 위치:** **attention 연산 내부, denoising step 사이, CFG 두 branch 사이.**
+
+- **기존 계산 → 대체 방식:** 매 step의 full attention을 세 방식으로 줄인다. **WA-RS**는 기준 step에서 `full attention 출력 − window attention 출력`을 저장한 뒤, 이후에는 현재 window attention만 새로 계산하고 저장한 차이를 더한다. **AST**는 선택된 layer의 attention 출력 전체를 앞선 step에서 가져오고, **ASC**는 conditional branch의 attention 출력을 unconditional branch에 재사용한다. 이는 attention을 대체하는 것으로 MLP와 diffusion step 전체를 삭제하는 것은 아니다.
+
+- **판단 기준·학습/준비:** 학습 없이 calibration에서 layer·step별 후보 조합을 시험한다. 압축 전후 모델 출력 오차가 임계값 아래인 후보 중 계산을 가장 많이 줄이는 것을 greedy하게 선택하며, 허용되지 않는 위치는 full attention을 유지한다. WA-RS에는 residual 갱신 step이 필요하다.
+
+**Method 근거:** [본문 §3.2–3.5, Eq.1–2, Algorithm 1](https://arxiv.org/html/2406.08552v2)
+
+### 8.2 소수 step 생성 + 호출당 attention·연산 비용 축소
+
+Efficient-vDiT는 step 수와 attention 연결을 함께 줄인다. TurboDiffusion은 여기에 저정밀 연산까지 결합한다. 3번의 호출 수 감소와 2·5번의 호출당 비용 감소를 동시에 적용하는 경우다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICML'25 WS](https://haozhang.ai/publication/) **[Efficient-vDiT (2502)](https://arxiv.org/abs/2502.06155)** | X | O — 학습: dense teacher | O | sampling step 수 + frame 간 Q–K 연결 | 소수 step 증류 + frame 연결 희소화·재증류 |
+| (x) **[TurboDiffusion (2512)](https://arxiv.org/abs/2512.16093)** | X | O — 학습: rCM teacher·fake-score | O | sampling step + sparse attention + 저정밀 kernel | rCM 소수 step + sparse/linear attention + 저정밀 kernel |
+
+#### Efficient-vDiT
+
+- **효율화 위치:** **denoiser 호출 횟수와 호출당 3D attention의 frame 연결.**
+
+- **기존 계산 → 대체 방식:** 먼저 multi-step consistency distillation으로 적은 step의 denoiser를 만든다. 그 안의 full attention은 **같은 latent frame의 diagonal block + 일정 간격으로 고른 소수 global reference frame에 대한 연결**만 남기는 고정 sparse mask로 바꾼다. 따라서 모든 frame token은 계속 존재하지만 대부분의 frame 간 QK·AV 계산이 사라진다. 마지막으로 dense teacher의 attention 출력·MLP 출력과 diffusion 목적함수로 sparse student를 다시 학습해 오차를 줄인다.
+
+- **판단 기준·학습/준비:** Layer마다 유지할 reference-frame 수 후보를 사전 검색한다. 여러 sampled timestep의 hidden-state 오차를 검사해 임계값을 만족하는 sparse mask를 선택하고 추론에는 고정해 사용한다. 단순한 training-free mask 적용이 아니라 **step distillation → layer별 mask search → knowledge distillation**의 준비 과정이다.
+
+**Method 근거:** [본문 §3.1–3.4, Algorithm 1, Eq.2–4](https://arxiv.org/html/2502.06155v2)
+
+#### TurboDiffusion
 
 - **효율화 위치:** sampling 횟수 + attention 연산량/정밀도 + linear 정밀도
 
@@ -716,38 +793,9 @@ flowchart TD
 
 **Method 근거:** [§1.1–1.3; §2.1–2.2](https://arxiv.org/html/2512.16093#S1) · [SLA §4](https://arxiv.org/html/2509.24006#S4)
 
-## 6. 이미지 diffusion에서 출발한 선행 연구
+## 9. 여러 후보의 탐색 비용 축소
 
-**비디오 방법의 배경으로 읽을 선행연구.** DeepCache의 U-Net 깊은 경로와 video DiT의 block residual은 구조가 다르다. TGATE는 self-attention과 cross-attention이 중요한 생성 시기가 다르다는 관찰을 이용한다. 이미지 중심 결과를 비디오에서 검증된 성능으로 옮겨 읽지 않는다.
-
-| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
-|---|---|---|---|---|---|
-| [CVPR'24](https://openaccess.thecvf.com/content/CVPR2024/html/Ma_DeepCache_Accelerating_Diffusion_Models_for_Free_CVPR_2024_paper.html) **[DeepCache (2312)](https://arxiv.org/abs/2312.00858)** | O | X | X | U-Net 깊은 경로의 feature 재사용 | U-Net 깊은 feature를 재사용하고 얕은 경로만 새로 계산 |
-| [TMLR'25](https://openreview.net/pdf?id=xXs2GKXPnH) **[T-GATE (2404)](https://arxiv.org/abs/2404.02747)** | O | X | X | 생성 전반부 self-attention·후반부 cross-attention | 초기 self-attention 주기 재사용·후기 cross-attention 고정 |
-
-### DeepCache
-
-- **효율화 위치:** **U-Net 깊은 main branch**; 이미지 diffusion에서 출발한 선행연구.
-
-- **기존 계산 → 대체 방식:** 원래 shallow downsampling→깊은 down/middle/up blocks→shallow upsampling을 모두 실행한다. DeepCache는 선택한 skip-connection 합류 지점에서 **이전 deep upsampling block의 고수준 feature**를 저장한다. 재사용 step에는 현재 입력의 shallow down path만 새로 계산해 저수준 feature를 얻고, 과거 deep feature와 concatenate한 후 남은 shallow up path를 실행한다. 깊은 중앙 구간은 생략하지만 현재 입력의 세부 변화와 최종 출력 계산은 유지한다.
-
-- **판단 기준·학습/준비:** **정해진 cache 깊이·refresh schedule.** 기본은 한 번 full U-Net 후 N−1번 partial inference이며, 변화가 큰 시점에 full 계산을 더 배치하는 비균일 schedule도 제시한다. 매 프레임이 같은지를 판정해 비디오 frame을 재사용하는 방식이나 DiT 전체 residual cache와 구분해야 한다.
-
-**Method 근거:** [§3.3, Eqs. 4–5 및 1:N inference](https://arxiv.org/html/2312.00858v2#S3.SS3)
-
-### TGATE / T-GATE
-
-- **효율화 위치:** **초기 self-attention, 후기 cross-attention**; 이미지 diffusion 중심 선행연구.
-
-- **기존 계산 → 대체 방식:** 초기 의미 형성 구간에는 cross-attention을 계속 실행하고, warm-up 뒤 self-attention 출력만 일정 간격으로 재사용한다. gate step에서 각 cross-attention의 **conditional·unconditional 출력 평균**을 anchor로 저장한 뒤, 후기 세부 개선 구간에서는 cross-attention 계산을 이 고정값으로 대체하고 self-attention은 계속 실행한다. residual 경로와 다른 연산이 남으므로 attention 값을 고정해도 denoiser 최종 출력이 매번 같아지는 것은 아니다.
-
-- **판단 기준·학습/준비:** **고정 phase 분할 및 주기.** gate step, 초기 warm-up, self-attention 갱신 간격 k를 정한다. online feature 변화에 따른 adaptive threshold가 아니라, attention 종류별로 중요한 denoising 시기가 다르다는 분석을 이용한 schedule이다. 전체 denoiser 출력 재사용이나 단순한 ‘텍스트 embedding cache’와 다르다.
-
-**Method 근거:** [§4.1–4.2, Eq. 6 및 Fig. 5](https://arxiv.org/html/2404.02747v3#S4.SS1)
-
-## 7. 여러 후보의 탐색 비용을 다루는 인접 연구
-
-**주로 줄이는 것: 여러 생성 후보를 시험하는 전체 탐색 예산.** 각 후보 내부의 캐싱을 이용하지만 후보 사이에 feature를 공유하는 방법은 아니다. 한 영상의 생성 속도와 후보 선택까지 포함한 전체 비용을 구분한다.
+**여러 seed 후보를 생성·평가·선택하는 전체 예산**을 줄인다. CachedSearch는 각 후보 안에서 캐싱하지만 후보들끼리 feature를 공유하지는 않는다. 한 영상의 생성 비용과 최종 후보 선택까지의 비용을 구분한다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
@@ -779,13 +827,15 @@ flowchart TD
 - **Anchor / trajectory:** anchor는 신경망을 실제 계산해 cache·예측의 기준으로 삼는 step이다. trajectory는 denoising을 진행하며 latent나 feature 값이 이동하는 경로다.
 - **Teacher / student:** teacher는 학습 신호를 주는 기존 모델, student는 실제 추론에 쓸 새 모델이다. 증류 논문에서는 teacher가 제공하는 목표와 student의 추론 절차를 나눠 읽어야 한다.
 
-## 사수님 코멘트와 연결
+## 표의 판정 기준
 
-**‘한 번의 generation 내부 redundancy 감소’는 캐싱·희소 어텐션 계열을 묶는 적절한 출발점이지만, 구체적인 중복의 위치까지 써야 방법의 차이가 드러난다.** [PAB](https://arxiv.org/abs/2408.12588)는 denoising step 사이의 attention 출력 중복, [SVG](https://arxiv.org/abs/2502.01776)는 한 attention 안의 낮은 기여도 연결, [FasterCache](https://arxiv.org/abs/2410.19355)는 CFG 두 분기 사이의 유사성까지 활용한다.
+- **공개·accept:** 공개월은 arXiv v1 제출일(UTC)이며, 더 이른 코드·OpenReview 공개까지 조사한 절대 최초 공개일은 아니다. Accept는 본회의·워크숍·저널을 구분하고 기존 확인일 기준을 유지했다.
+- **Training-free:** 추가 신경망 학습이 없으면 `O`. 통계 측정·다항식 fitting·설정 탐색은 `O (보정/검색)`, quantizer·보정 모듈의 gradient 학습은 `X (보정학습)`이다. `FT`는 fine-tuning이다.
+- **외부 모델:** 준비·학습·후보 선택에 별도로 실행하는 teacher·reward·discriminator·분할 모델 등을 포함한다. 기본 text encoder·VAE, 내부 router/scorer, 결과 보고용 평가 모델, calibration 통계만 얻는 원본 생성기 실행은 제외한다. 같은 Q/K로 dense attention 정답을 계산하는 것도 별도 외부 모델로 세지 않는다.
+- **비디오 모델 학습:** 해당 효율화를 위한 backbone·LoRA·증류 student 학습이 기준이다. Router·quantizer·오차 보정 모듈만 학습하면 별도 표기하고, AE 변경 시 AE 학습도 명시한다. 기본 모델의 원래 사전학습은 세지 않는다.
+- **적용 범위:** 표의 `X`는 정리한 설정 기준이다. Denoising step, 영상 frame 시간축, 자기회귀 chunk 순서를 구분하며, 연산량 감소와 실제 지연시간 단축을 동일시하지 않는다.
 
-같은 계열의 방법들이 실제로 비슷한 부분도 있다. 특히 step distillation 방법들은 공통으로 **신경망 평가 횟수를 줄이는 위치**를 바꾸며, 주요 차이는 그 적은 횟수로 품질을 유지하도록 **어떤 학습 목표를 주는가**에 있다. 반면 [CachedSearch](https://arxiv.org/abs/2607.23159)는 개별 rollout의 캐싱을 여러 후보의 탐색 예산 절감에 활용한다. 이를 후보들끼리 feature cache를 공유하는 방법으로 해석하거나, 기존 연구 전체가 단일 생성 내부만 다룬다고 단정해서는 안 된다.
-
-### 서지·범위상 주의할 항목
+## 서지·범위상 주의할 항목
 
 - **HiCache·TGATE:** 초기 arXiv 제목과 출판 제목이 달라 최신 제목을 사용했다. 날짜는 같은 arXiv ID의 v1을 유지했다.
 - **Efficient-vDiT:** 확인한 채택은 **ICML 2025 ES-FoMo 워크숍**이다. 홈페이지의 축약 표기나 익명 ICLR 제출본을 본회의 채택으로 해석하지 않았다. [저자 publication list](https://haozhang.ai/publication/)
