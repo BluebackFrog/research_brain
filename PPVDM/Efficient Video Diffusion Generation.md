@@ -2,7 +2,7 @@
 
 확인일: **2026-10-26**. 비디오 diffusion·flow-matching 생성의 추론 비용을 낮추는 **50편**을 정리했다. [비디오 추론 벤치마크 조사](thread://01a16659-7fb8-7632-bf41-6019ce6358a3?hostId=local)처럼 최초 공개 연월·학회 정보를 유지하면서, 각 방법을 **‘어디를 바꾸는가 → 원래 어떤 계산을 했는가 → 무엇으로 대체하는가 → 무엇을 보고 결정하는가’**로 설명한다.
 
-**세부 분류:** [Adaptive Diffusion Step Caching](<Adaptive Diffusion Step Caching.md>)에 현재 생성의 변화에 적응하는 7편과 사전 통계 기반 비교군 MagCache를 따로 모았다. 입력 변화·얕은 층 probe·residual 기반 간격·민감도·token 선택을 구분하고, 주기적 재사용·feature 외삽 연구는 별도 비교군으로 정리했다. 분류 확인일: 2026-10-31.
+**분류 개편: 2026-10-31.** 1번의 12편을 재계산 판단과 출력 대체 방식에 따라 7개 소분류로 나눴다. 논문별 날짜·학회 정보는 위 확인일 기준을 유지했다.
 
 ## 핵심 아이디어 먼저
 
@@ -45,6 +45,22 @@ flowchart TD
 | [SageAttention2](https://arxiv.org/html/2411.10958#S3) | attention 행렬곱을 고정밀도로 수행 → Q/K의 INT4와 P/V의 FP8 연산 사용 | 연결을 줄이는 대신 **곱셈의 정밀도와 GPU 연산 방식**을 바꾼다. |
 | [VideoLCM](https://arxiv.org/abs/2312.09109) | 여러 step에 걸쳐 영상을 복원 → 소수 step으로 복원하도록 학습한 모델을 사용 | **신경망 호출 횟수 자체**를 줄인다. |
 
+### 1–5번은 각각 무엇을 바꾸는가
+
+각 절은 **주된 효율화 대상**으로 묶었다. 서로 배타적인 분류는 아니며, 한 논문이 여러 축을 결합할 수 있다.
+
+| 절 | 바꾸는 대상 | 생성 과정에서 달라지는 동작 |
+|---|---|---|
+| **1. step 간 재사용** | 이미 계산한 feature를 다시 계산할지 | 현재 step의 attention·블록·denoiser 출력을 과거 cache나 외삽값으로 대체 |
+| **2. 연결·token별 계산** | 한 번의 forward가 처리할 연결·token | 현재 attention에서 일부 Q–K 연결만 계산하거나 token을 병합·선택적으로 갱신 |
+| **3. 소수 step 생성** | 영상을 완성하는 denoising 반복 횟수 | 많은 step의 동작을 적은 step으로 수행하도록 모델을 학습 |
+| **4. 자기회귀·스트리밍** | 영상 시간축에서 frame/chunk를 만드는 순서 | 전체 clip을 함께 다듬는 대신 앞 chunk부터 완성하고, 과거 문맥을 보며 다음 chunk 생성 |
+| **5. 연산·구조·시스템** | 숫자 정밀도·모델/latent 크기·GPU 실행 | 각 연산을 저비트로 수행하거나, 모델·입력 표현을 줄이거나, 여러 GPU에 분배; 여러 축을 결합하는 방법도 포함 |
+
+**1번과 2번:** NaviCache는 비슷한 step의 계산을 과거 결과로 대체한다. STA는 현재 step의 attention을 계산하되 연결할 token 쌍을 줄인다. 다만 **Astraea는 token별 출력 cache**, **DiTFastAttn은 attention 희소화와 step 재사용**, **LiteAttention은 skip-mask 재사용**을 결합하므로 두 축이 겹친다. 이들은 2번에 유지하되, 이를 모든 2번 논문이 순수하게 한 step 안에서만 작동한다는 뜻으로 읽지 않는다. [NaviCache §3.2](https://arxiv.org/html/2606.26795v2#S3.SS2) · [STA §3](https://arxiv.org/html/2502.04507v3#S3) · [Astraea §3](https://arxiv.org/html/2506.05096v4#S3)
+
+**3번과 5번:** 3번은 주로 **반복 횟수**, 5번은 **한 번 실행하는 연산·모델의 비용과 하드웨어 실행 방식**을 바꾼다. 예를 들어 VideoLCM은 teacher와 같은 구조의 student로 호출 수를 줄이고, VDMini는 블록을 제거해 작은 student를 만든 뒤 증류로 품질을 회복한다. 따라서 ‘증류를 쓰는가’만으로 둘을 나누면 안 된다. 5번의 TurboDiffusion은 소수 step 증류·희소 attention·양자화를 결합하므로 2·3·5번에 동시에 걸친다. [VideoLCM §3](https://arxiv.org/html/2312.09109#S3) · [VDMini §3.2–3.3](https://arxiv.org/html/2411.18375#S3.SS2) · [TurboDiffusion §1](https://arxiv.org/html/2512.16093#S1)
+
 ## 문서를 읽는 기준
 
 - **논문 표기:** `ICLR'25 PAB (2408)`처럼 **accept · 짧은 이름 · 최초 공개 연월(YYMM)** 순서다. 논문명은 arXiv, accept는 확인 근거로 연결한다. 공개월은 **arXiv v1 제출일(UTC)** 기준이며, 더 이른 코드·OpenReview 공개까지 소급한 절대 최초 공개일은 아니다.
@@ -55,56 +71,33 @@ flowchart TD
 - **효율화 위치 / 방법:** 위치는 attention 출력·블록 residual·Q–K 연결·MLP·CFG 등 **어느 연산인가**, 방법은 복사·외삽·병합·희소화·양자화·증류 등 **그 연산을 어떻게 바꾸는가**다. 표의 조건과 세부 동작은 바로 아래 논문별 설명·원문 근거를 따른다.
 - **범위:** `X`는 표에 정리한 방법·설정에서 해당 요소를 쓰지 않는다는 뜻이다. 모든 변형에 대한 부재 증명은 아니다. Denoising step, 비디오 frame 시간축, 다음 chunk를 만드는 자기회귀 순서는 구분한다. 한 방법이 여러 위치를 바꿀 수 있으며, 학습 비용·연산량 감소·실제 지연시간 단축도 구분한다.
 
-## 1. 캐싱·feature 재사용·예측
+## 1. Diffusion step 사이의 계산 재사용
 
-**주로 줄이는 것: 같은 영상을 다듬는 denoising step 사이의 반복 신경망 계산.** 비교할 때는 ① 저장하는 tensor가 어디의 출력인지, ② 어느 step에서 다시 계산하는지, ③ 생략한 출력을 단순 복사·residual 덧셈·외삽 중 무엇으로 채우는지를 나눠 본다. Sampling step을 유지해도 그 안에서 실제로 실행하는 신경망 구간은 줄어들 수 있다.
+**공통 목표는 같은 영상을 denoise하는 step 사이의 반복 신경망 계산을 줄이는 것**이다. 그 안에서 **언제 재계산하는가**와 **생략한 출력을 무엇으로 채우는가**를 나눠 아래 7개 소분류로 정리했다. Sampling step을 유지해도 그 안의 신경망 계산은 생략할 수 있으며, sampler의 latent 갱신은 계속한다.
+
+| 소분류 | 논문 | 재사용을 정하는 기준 |
+|---|---|---|
+| **1.1 입력 변화 기반** | TeaCache, EasyCache, NaviCache | 현재 입력에서 출력 변화 추정 |
+| **1.2 얕은 층 probe 기반** | DiCache | 현재 얕은 층을 실행한 뒤 깊은 층의 변화 추정 |
+| **1.3 residual 변화로 간격 조절** | AdaCache / MoReg | 실제 계산한 residual 변화로 다음 재사용 길이 결정 |
+| **1.4 입력·시간 민감도 기반** | SenCache | 현재 latent·timestep 이동을 사전 민감도로 가중 |
+| **1.5 사전 통계 기반** | MagCache | 사전 residual 크기 비율로 예상 누적 오차 계산 |
+| **1.6 예정된 주기 재사용** | PAB, ProfilingDiT | 모듈·블록별로 정한 refresh schedule |
+| **1.7 feature 외삽** | FasterCache, TaylorSeer, HiCache | 예정된 refresh 사이의 feature tensor를 예측 |
+
+**‘현재 생성에서 변화가 작으면 스킵’에 직접 대응하는 큰 계산 구간의 방법은 1.1–1.4의 6편**이다. 1.5는 사전 통계 기반 비교군, 1.6–1.7은 step 간 중복을 활용하는 다른 방법으로 분리했다. 2번의 **Astraea**도 온라인 변화 신호를 쓰지만 **token 단위 갱신**이므로 이 여섯 편과 계산 단위가 다르다.
+
+### 1.1 입력 변화로 출력 변화를 추정
+
+**현재 입력의 변화 → 출력 변화 추정 → 누적값과 threshold 비교 → 큰 계산 구간 재사용 여부 결정.** TeaCache는 timestep으로 변조한 입력과 사전 다항식, EasyCache는 최근 관측한 출력 변화÷입력 변화 비율, NaviCache는 그 비율의 필터 추정값을 쓴다. 출력 변화 추정값은 판정용 수치이고, 실제 생략한 출력은 별도로 저장한 residual로 구성한다.
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
-| [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/file/092c2d45005ea2db40fc24c470663416-Paper-Conference.pdf) **[PAB (2408)](https://arxiv.org/abs/2408.12588)** | O | X | X | 개별 spatial·temporal·cross-attention의 출력 | 종류별 고정 주기로 attention 출력 재사용 |
-| [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/file/518046d86bbc41a0707727c38301ad8e-Paper-Conference.pdf) **[FasterCache (2410)](https://arxiv.org/abs/2410.19355)** | O | X | X | attention 출력·CFG 무조건부 분기 | attention 출력 외삽 + 주파수 차이로 CFG 무조건부 예측 복원 |
-| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/html/Kahatapitiya_Adaptive_Caching_for_Faster_Video_Generation_with_Diffusion_Transformers_ICCV_2025_paper.html) **[AdaCache (2411)](https://arxiv.org/abs/2411.02397)** | O | X | X | 각 블록의 attention·MLP residual 가지 | residual 변화·움직임에 따라 재사용 간격 조절 |
 | [CVPR'25](https://openaccess.thecvf.com/content/CVPR2025/papers/Liu_Timestep_Embedding_Tells_Its_Time_to_Cache_for_Video_Diffusion_CVPR_2025_paper.pdf) **[TeaCache (2411)](https://arxiv.org/abs/2411.19108)** | O (다항식 보정) | X | X | DiT 블록 묶음 전체의 residual | 입력 변화로 누적 오차를 추정해 블록 residual 재사용 |
-| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/papers/Liu_From_Reusing_to_Forecasting_Accelerating_Diffusion_Models_with_TaylorSeers_ICCV_2025_paper.pdf) **[TaylorSeer (2503)](https://arxiv.org/abs/2503.06923)** | O | X | X | 선택한 층의 중간 feature | 과거 feature의 유한차분으로 Taylor 외삽 |
-| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/papers/Ma_Model_Reveals_What_to_Cache_Profiling-Based_Feature_Reuse_for_Video_ICCV_2025_paper.pdf) **[ProfilingDiT (2504)](https://arxiv.org/abs/2504.03140)** | O (profiling) | O — 준비: SAM2 | X | 배경에 주로 집중하는 블록 구간 전체 | 배경 중심 블록을 선별해 residual 재사용 |
-| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/hash/311207bb626e36a8f1d3eb92aa67af22-Abstract-Conference.html) **[MagCache (2506)](https://arxiv.org/abs/2506.09045)** | O (통계 보정) | X | X | denoiser 전체 residual | 사전 측정한 residual 크기 비율로 재사용 오차 추정 |
 | (x) **[EasyCache (2507)](https://arxiv.org/abs/2507.02860)** | O | X | X | denoiser 전체 residual | 실행 중 입력·출력 변화 비율로 residual 재사용 결정 |
-| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/b67c77f8db8b991d73d6f2e16f491840-Abstract-Conference.html) **[HiCache (2508)](https://arxiv.org/abs/2508.16984)** | O | X | X | 중간 feature의 예측식 | Taylor 예측을 scaled Hermite 예측으로 교체 |
-| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/78288ef33b18a351c3cd679dc9a15c8d-Abstract-Conference.html) **[DiCache (2508)](https://arxiv.org/abs/2508.17356)** | O | X | X | DiT 깊은 층의 residual | 얕은 층을 probe로 계산하고 깊은 residual 보간·외삽 |
-| [CVPR'26](https://openaccess.thecvf.com/content/CVPR2026/html/Haghighi_SenCache_Accelerating_Diffusion_Model_Inference_via_Sensitivity-Aware_Caching_CVPR_2026_paper.html) **[SenCache (2602)](https://arxiv.org/abs/2602.24208)** | O (민감도 보정) | X | X | denoiser 최종 출력 | latent·timestep 이동을 민감도로 가중해 최종 출력 재사용 |
 | [ICML'26](https://proceedings.mlr.press/v306/lv26m.html) **[NaviCache (2606)](https://arxiv.org/abs/2606.26795)** | O | X | X | denoiser 전체 residual | 변화 비율과 불확실성을 온라인 추정해 residual 재사용 |
 
-### PAB
-
-- **효율화 위치:** DiT **개별 spatial/temporal/cross-attention 모듈 출력**, 특히 denoising 중간 구간.
-
-- **기존 계산 → 대체 방식:** 원래 매 step 새로 계산하던 attention의 **출력 tensor**를 저장하고 정해진 후속 step에 그대로 넣어 해당 attention 연산을 건너뛴다. 공간·시간·텍스트 attention을 같은 빈도로 취급하지 않고, 변동이 큰 공간 attention은 짧게, temporal은 중간, cross-attention은 길게 재사용한다. 나머지 block 연산과 sampler는 계속 실행하며, 부록에는 일부 MLP까지 재사용하는 설정도 있다.
-
-- **판단 기준·학습/준비:** **사전 분석에 근거한 고정 schedule.** 모델별로 재사용할 timestep 구간과 attention 종류별 간격을 정한다. 매 영상에서 실제 출력 오차를 측정하여 결정하는 방식은 아니다. 다중 GPU에서는 temporal attention을 재사용하는 step의 관련 sequence-parallel 통신도 함께 줄인다.
-
-**Method 근거:** [§2.3–2.4](https://arxiv.org/html/2408.12588v3#S2.SS3)
-
-### FasterCache
-
-- **효율화 위치:** **Attention 출력 계산**과 **CFG의 unconditional denoiser branch**라는 서로 다른 두 위치.
-
-- **기존 계산 → 대체 방식:** Attention은 최근 두 번 실제 계산한 출력의 차분을 이용해 다음 출력을 **선형 외삽**한다. 단순 복사 대신 `최근 출력 + 가중된 이전 변화량`으로 대체하고 attention 외의 연산은 이어간다. CFG-Cache는 conditional·unconditional 최종 noise prediction에 FFT를 적용하여 두 출력의 **저주파 차이와 고주파 차이**를 저장한다. 생략 step에는 conditional branch만 실행하고, 그 주파수 성분에 저장된 두 차이를 각각 가중해 더한 뒤 역 FFT로 unconditional prediction을 복원하여 CFG를 계산한다.
-
-- **판단 기준·학습/준비:** **고정 refresh 주기와 timestep 가중치.** attention은 기본적으로 **실제 계산 step과 외삽 step을 번갈아 배치**하고, CFG 두 branch도 주기적으로 모두 계산해 주파수 차이를 갱신한다. denoising 진행 단계에 따라 저주파·고주파 보정 비중을 바꾸며, 매번 실제 오차를 알아내어 skip하는 방식은 아니다.
-
-**Method 근거:** [§2.4, Eqs. 4–8](https://arxiv.org/html/2410.19355v2#S2.SS4)
-
-### AdaCache / AdaCache-MoReg
-
-- **효율화 위치:** 각 DiT block의 **attention·cross-attention·MLP residual 가지 출력**.
-
-- **기존 계산 → 대체 방식:** 매 step 각 가지를 다시 실행하던 대신 이전 계산의 가지 출력을 현재 hidden state에 더한다. 즉 현재 입력은 계속 전달되지만 큰 attention/MLP 계산은 캐시로 대체된다. 구현 방향은 layer별 임의 skip보다 **전체 DiT layer에 공통인 재계산 schedule**을 사용하며, refresh step에는 각 layer의 residual을 함께 갱신한다.
-
-- **판단 기준·학습/준비:** **온라인 내용 적응 + 사전에 정한 codebook.** 실제 계산한 두 residual의 L1 거리÷경과 step 수를 구하고, 미리 정한 `변화량 구간 → 다음 재사용 길이` 표에 매핑한다. MoReg는 residual의 프레임 간 차이와 그 값의 step 간 변화까지 측정하여 움직임이 큰 영상은 더 자주 계산한다. 따라서 training-free라도 cache-rate·threshold 설정이 사라지는 것은 아니다.
-
-**Method 근거:** [§4.1–4.3, Eqs. 4–9](https://arxiv.org/html/2411.02397v2#S4.SS1)
-
-### TeaCache
+#### TeaCache
 
 - **효율화 위치:** 모델별 DiT **block 묶음 전체**. 공식 HunyuanVideo 구현은 double/single blocks 전부를 묶는다.
 
@@ -114,37 +107,7 @@ flowchart TD
 
 **Method 근거:** [§3.2–3.3](https://arxiv.org/html/2411.19108v2#S3.SS2) · [공식 HunyuanVideo 구현](https://github.com/ali-vilab/TeaCache/blob/main/TeaCache4HunyuanVideo/teacache_sample_video.py#L83)
 
-### TaylorSeer
-
-- **효율화 위치:** DiT **층별 중간 feature의 timestep 방향 변화**; attention/MLP 등 지정된 계산 지점.
-
-- **기존 계산 → 대체 방식:** 단순 cache는 이전 feature 값을 그대로 복사하지만, TaylorSeer는 실제 계산한 여러 anchor의 feature와 **1차·2차 이상 유한차분**을 함께 저장한다. 계산하지 않는 step의 feature를 `마지막 feature + 변화율×경과 step + 고차 변화항`으로 예측하여 해당 feature를 만드는 신경망 연산을 대체한다. 예측 대상은 픽셀 프레임이나 latent의 최종 샘플 자체가 아니라, 적용 지점의 중간 activation이다.
-
-- **판단 기준·학습/준비:** **주기적 실제 계산 + 온라인 차분 갱신.** N step마다 완전히 계산하고 차분 cache를 갱신하며, 중간 N−1 step은 Taylor 다항식으로 예측한다. step 간격으로 차분을 정규화하고, 예측 차수와 refresh 간격을 설정한다. 각 step의 실제 예측 오차를 관측해 refresh 여부를 고르는 기법은 아니다.
-
-**Method 근거:** [§3.1–3.2, Eqs. 4–10](https://arxiv.org/html/2503.06923v2#S3.SS1)
-
-### ProfilingDiT
-
-- **효율화 위치:** **배경에 주로 attention을 주는 DiT block/연속 block 구간**.
-
-- **기존 계산 → 대체 방식:** 모든 block을 매번 계산하던 대신 선택한 배경 중심 block의 **출력 hidden state−입력 hidden state**를 저장해 현재 입력에 더한다. 연속된 block은 묶음의 입출력 차이를 저장하고 떨어진 block은 따로 저장하여 여러 구간을 건너뛴다. 전경 중심 block은 계속 계산한다. 영상의 배경 픽셀만 mask로 잘라 생략하는 방법이 아니라, **어느 block 전체를 재사용할지** 고르는 방법이다.
-
-- **판단 기준·학습/준비:** **Profiling + 재계산 일정.** 모델의 각 step noise prediction에서 채널 차원을 PCA로 3차원으로 줄여 RGB 같은 표현을 만든 뒤, 여기에 SAM2를 적용해 전경 mask를 얻는다. 높은 attention 값을 가진 token과 이 mask의 겹침을 프레임별로 분석·평균하여 전경 중심/배경 중심 block을 구분한다. 초기 warm-up은 실제 계산하고, 이후에는 step에 따라 정한 cache 간격으로 선택된 구간을 재계산한다. 핵심 선택 대상은 배경 픽셀이 아니라 배경에 주로 집중하는 신경망 block이다.
-
-**Method 근거:** [§3.2–3.3, Eqs. 6–15](https://arxiv.org/html/2504.03140v2#S3.SS2)
-
-### MagCache
-
-- **효율화 위치:** 논문 정의상 denoiser의 **residual $r_t=v_\theta(x_t,t)-x_t$** 및 full forward 대체.
-
-- **기존 계산 → 대체 방식:** 원래 현재 noisy latent로 신경망 출력을 다시 구하던 대신, 마지막 실제 계산에서 저장한 residual을 현재 입력에 더해 출력을 근사한다. 주된 기여는 저장한 값을 새로 외삽하는 것보다 **얼마나 오래 재사용해도 되는지 판단하는 magnitude 모델**이다. residual 방향 변화가 작다는 관찰 아래, step별 norm 비율의 곱으로 anchor 대비 상대 변화와 누적 오차를 추정한다.
-
-- **판단 기준·학습/준비:** **단일 calibration 생성으로 사전 측정한 timestep별 크기 비율 + 실행 중 누적.** 누적 오차가 threshold 이하이고 연속 skip 수가 상한 K 이내이면 재사용하며, 아니면 실제 계산 후 reset한다. 이 비율은 현재 입력 feature를 매번 probe해서 얻는 값이 아니므로 TeaCache·EasyCache와 같은 online signal로 묶으면 안 된다. 초기 보호 구간과 K도 설정한다.
-
-**Method 근거:** [§3.1–3.3, Eqs. 3–8](https://arxiv.org/html/2506.09045v2#S3.SS1)
-
-### EasyCache
+#### EasyCache
 
 - **효율화 위치:** denoiser 입출력의 **변환량 $\Delta=v-x$**; full forward 계산.
 
@@ -156,17 +119,25 @@ flowchart TD
 
 **서지 근거:** [공식 프로젝트](https://h-embodvis.github.io/EasyCache/) · [저장소](https://github.com/H-EmbodVis/EasyCache)
 
-### HiCache
+#### NaviCache
 
-- **효율화 위치:** Taylor-style cache-then-forecast의 **feature 예측식**; 기존 cache 적용 지점 유지.
+- **효율화 위치:** denoiser forward의 **출력−입력 residual 재사용** 및 reuse 판정기의 상태 추정.
 
-- **기존 계산 → 대체 방식:** TaylorSeer처럼 실제 계산한 feature와 고차 유한차분을 저장하지만, 예측식의 거듭제곱 항을 **scaled Hermite 다항식**으로 교체한다. 예측되는 것은 지정한 중간 feature의 다음 값이며, 새 attention matrix나 새 latent trajectory를 학습하는 방식이 아니다. 한 scale 값으로 예측 거리와 고차 항의 크기를 함께 축소해 긴 외삽에서 고차 항이 과도하게 커지는 문제를 줄인다.
+- **기존 계산 → 대체 방식:** 공식 HunyuanVideo 구현은 마지막 full forward의 `출력−raw latent 입력`을 저장하고, skip 시 `현재 raw latent + residual`을 반환한다. EasyCache처럼 입력 변화에서 출력 변화를 예측하지만, 마지막 관측 비율 하나를 그대로 믿지 않고 **변화 비율의 추정값과 그 불확실성**을 유지한다. 실제 계산이 일어나면 새 출력 변화/입력 변화 비율을 관측하고, 과거 추정과 새 관측을 불확실성에 따라 섞는다.
 
-- **판단 기준·학습/준비:** **고정 간격 refresh + 온라인 차분 갱신.** 정해진 anchor step에서 full forward를 실행하고 feature 차분을 업데이트하며, 그 사이에는 Hermite 기반으로 예측한다. 예측 차수·간격·scale을 정해야 한다. 독립적인 online skip 판정기를 제시하기보다 기존 Taylor 예측기를 교체하는 방법이므로, 캐시 tensor의 정확한 층/모듈 경계는 결합한 framework에 따른다.
+- **판단 기준·학습/준비:** **초기 온라인 정렬 + 실행 중 Bayesian 보정; 오프라인 fitting 없음.** 초기 몇 step을 실제 계산해 비율을 잡고, 이후 `예측 비율×입력 변화`를 누적해 threshold를 넘으면 refresh한다. 새 실제 출력이 있어야 비율을 보정할 수 있으며, threshold·초기 정렬 길이·process/measurement noise는 설정값이다.
 
-**Method 근거:** [§3.2–3.3, Eq. 5 및 Algorithm 1](https://arxiv.org/html/2508.16984v2#S3.SS2)
+**Method 근거:** [§3.2.1–3.2.3](https://arxiv.org/html/2606.26795v2#S3.SS2) · [공식 HunyuanVideo 구현](https://github.com/HelloZicky/NaviCache/blob/main/NaviCache4HunyuanVideo/navicache_sample_video.py#L55)
 
-### DiCache
+### 1.2 얕은 층을 먼저 계산해 깊은 층의 재사용 판정
+
+**현재 입력 → 얕은 probe 실행 → feature 변화 측정 → 나머지 깊은 층을 실행할지 결정.** 입력만 보는 1.1보다 실제 모델 반응을 더 관측하지만, 스킵하는 step에도 probe 비용이 든다. 재사용 시에는 현재 probe의 이동에 맞춰 과거 residual들을 조합한다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/78288ef33b18a351c3cd679dc9a15c8d-Abstract-Conference.html) **[DiCache (2508)](https://arxiv.org/abs/2508.17356)** | O | X | X | DiT 깊은 층의 residual | 얕은 층을 probe로 계산하고 깊은 residual 보간·외삽 |
+
+#### DiCache
 
 - **효율화 위치:** DiT의 **앞쪽 얕은 layer는 매 step 계산**, 나머지 깊은 layer를 선택적으로 생략.
 
@@ -176,7 +147,33 @@ flowchart TD
 
 **Method 근거:** [§3.1–3.2, implicit analysis 및 dynamic trajectory alignment](https://arxiv.org/html/2508.17356v2#S3.SS1)
 
-### SenCache
+### 1.3 관측한 residual 변화로 다음 재계산 간격 결정
+
+**실제 계산한 step들의 residual 변화 → 다음 재사용 길이 선택 → 그 길이만큼 재사용 후 다시 측정.** 1.1처럼 매 스킵 step에서 현재 입력을 검사하는 방식과 다르다. MoReg는 움직임 정보까지 반영한다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/html/Kahatapitiya_Adaptive_Caching_for_Faster_Video_Generation_with_Diffusion_Transformers_ICCV_2025_paper.html) **[AdaCache (2411)](https://arxiv.org/abs/2411.02397)** | O | X | X | 각 블록의 attention·MLP residual 가지 | residual 변화·움직임에 따라 재사용 간격 조절 |
+
+#### AdaCache / AdaCache-MoReg
+
+- **효율화 위치:** 각 DiT block의 **attention·cross-attention·MLP residual 가지 출력**.
+
+- **기존 계산 → 대체 방식:** 매 step 각 가지를 다시 실행하던 대신 이전 계산의 가지 출력을 현재 hidden state에 더한다. 즉 현재 입력은 계속 전달되지만 큰 attention/MLP 계산은 캐시로 대체된다. 구현 방향은 layer별 임의 skip보다 **전체 DiT layer에 공통인 재계산 schedule**을 사용하며, refresh step에는 각 layer의 residual을 함께 갱신한다.
+
+- **판단 기준·학습/준비:** **온라인 내용 적응 + 사전에 정한 codebook.** 실제 계산한 두 residual의 L1 거리÷경과 step 수를 구하고, 미리 정한 `변화량 구간 → 다음 재사용 길이` 표에 매핑한다. MoReg는 residual의 프레임 간 차이와 그 값의 step 간 변화까지 측정하여 움직임이 큰 영상은 더 자주 계산한다. 따라서 training-free라도 cache-rate·threshold 설정이 사라지는 것은 아니다.
+
+**Method 근거:** [§4.1–4.3, Eqs. 4–9](https://arxiv.org/html/2411.02397v2#S4.SS1)
+
+### 1.4 latent·timestep 이동을 민감도로 가중해 판정
+
+**현재 latent 이동과 timestep 이동 → 사전 측정한 두 민감도로 가중 → 허용 점수와 비교.** 현재 샘플의 변화에 적응하지만, 민감도 calibration은 필요하다. 재사용하는 값은 출력−입력 residual이 아니라 denoiser 최종 출력 자체다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [CVPR'26](https://openaccess.thecvf.com/content/CVPR2026/html/Haghighi_SenCache_Accelerating_Diffusion_Model_Inference_via_Sensitivity-Aware_Caching_CVPR_2026_paper.html) **[SenCache (2602)](https://arxiv.org/abs/2602.24208)** | O (민감도 보정) | X | X | denoiser 최종 출력 | latent·timestep 이동을 민감도로 가중해 최종 출력 재사용 |
+
+#### SenCache
 
 - **효율화 위치:** denoiser **최종 출력 전체**와 full forward 호출.
 
@@ -186,15 +183,92 @@ flowchart TD
 
 **Method 근거:** [§4.3–4.5](https://arxiv.org/html/2602.24208v2#S4.SS3)
 
-### NaviCache
+### 1.5 사전 측정한 변화 통계로 스킵 오차 추정
 
-- **효율화 위치:** denoiser forward의 **출력−입력 residual 재사용** 및 reuse 판정기의 상태 추정.
+**사전 측정한 step별 residual 크기 비율 → 예상 누적 오차 → 재사용 여부 결정.** 온라인 누적 계산은 하지만 현재 영상의 입력/probe 변화로 판정하지는 않는다. 따라서 1.1–1.4의 내용 적응형 판정과 구분한다.
 
-- **기존 계산 → 대체 방식:** 공식 HunyuanVideo 구현은 마지막 full forward의 `출력−raw latent 입력`을 저장하고, skip 시 `현재 raw latent + residual`을 반환한다. EasyCache처럼 입력 변화에서 출력 변화를 예측하지만, 마지막 관측 비율 하나를 그대로 믿지 않고 **변화 비율의 추정값과 그 불확실성**을 유지한다. 실제 계산이 일어나면 새 출력 변화/입력 변화 비율을 관측하고, 과거 추정과 새 관측을 불확실성에 따라 섞는다.
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [NeurIPS'25](https://proceedings.neurips.cc/paper_files/paper/2025/hash/311207bb626e36a8f1d3eb92aa67af22-Abstract-Conference.html) **[MagCache (2506)](https://arxiv.org/abs/2506.09045)** | O (통계 보정) | X | X | denoiser 전체 residual | 사전 측정한 residual 크기 비율로 재사용 오차 추정 |
 
-- **판단 기준·학습/준비:** **초기 온라인 정렬 + 실행 중 Bayesian 보정; 오프라인 fitting 없음.** 초기 몇 step을 실제 계산해 비율을 잡고, 이후 `예측 비율×입력 변화`를 누적해 threshold를 넘으면 refresh한다. 새 실제 출력이 있어야 비율을 보정할 수 있으며, threshold·초기 정렬 길이·process/measurement noise는 설정값이다.
+#### MagCache
 
-**Method 근거:** [§3.2.1–3.2.3](https://arxiv.org/html/2606.26795v2#S3.SS2) · [공식 HunyuanVideo 구현](https://github.com/HelloZicky/NaviCache/blob/main/NaviCache4HunyuanVideo/navicache_sample_video.py#L55)
+- **효율화 위치:** 논문 정의상 denoiser의 **residual $r_t=v_\theta(x_t,t)-x_t$** 및 full forward 대체.
+
+- **기존 계산 → 대체 방식:** 원래 현재 noisy latent로 신경망 출력을 다시 구하던 대신, 마지막 실제 계산에서 저장한 residual을 현재 입력에 더해 출력을 근사한다. 주된 기여는 저장한 값을 새로 외삽하는 것보다 **얼마나 오래 재사용해도 되는지 판단하는 magnitude 모델**이다. residual 방향 변화가 작다는 관찰 아래, step별 norm 비율의 곱으로 anchor 대비 상대 변화와 누적 오차를 추정한다.
+
+- **판단 기준·학습/준비:** **단일 calibration 생성으로 사전 측정한 timestep별 크기 비율 + 실행 중 누적.** 누적 오차가 threshold 이하이고 연속 skip 수가 상한 K 이내이면 재사용하며, 아니면 실제 계산 후 reset한다. 이 비율은 현재 입력 feature를 매번 probe해서 얻는 값이 아니므로 TeaCache·EasyCache와 같은 online signal로 묶으면 안 된다. 초기 보호 구간과 K도 설정한다.
+
+**Method 근거:** [§3.1–3.3, Eqs. 3–8](https://arxiv.org/html/2506.09045v2#S3.SS1)
+
+### 1.6 정해진 schedule에 따라 feature 재사용
+
+**재사용할 모듈·구간과 갱신 일정을 정해 놓고 실행.** PAB는 attention 종류별 간격, ProfilingDiT는 배경 중심 블록 선별과 timestep별 간격이 핵심이다. step 간 변화가 작다는 관찰을 활용하지만, 현재 샘플의 현재 변화가 threshold 아래인지 매번 확인하는 방식은 아니다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/file/092c2d45005ea2db40fc24c470663416-Paper-Conference.pdf) **[PAB (2408)](https://arxiv.org/abs/2408.12588)** | O | X | X | 개별 spatial·temporal·cross-attention의 출력 | 종류별 고정 주기로 attention 출력 재사용 |
+| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/papers/Ma_Model_Reveals_What_to_Cache_Profiling-Based_Feature_Reuse_for_Video_ICCV_2025_paper.pdf) **[ProfilingDiT (2504)](https://arxiv.org/abs/2504.03140)** | O (profiling) | O — 준비: SAM2 | X | 배경에 주로 집중하는 블록 구간 전체 | 배경 중심 블록을 선별해 residual 재사용 |
+
+#### PAB
+
+- **효율화 위치:** DiT **개별 spatial/temporal/cross-attention 모듈 출력**, 특히 denoising 중간 구간.
+
+- **기존 계산 → 대체 방식:** 원래 매 step 새로 계산하던 attention의 **출력 tensor**를 저장하고 정해진 후속 step에 그대로 넣어 해당 attention 연산을 건너뛴다. 공간·시간·텍스트 attention을 같은 빈도로 취급하지 않고, 변동이 큰 공간 attention은 짧게, temporal은 중간, cross-attention은 길게 재사용한다. 나머지 block 연산과 sampler는 계속 실행하며, 부록에는 일부 MLP까지 재사용하는 설정도 있다.
+
+- **판단 기준·학습/준비:** **사전 분석에 근거한 고정 schedule.** 모델별로 재사용할 timestep 구간과 attention 종류별 간격을 정한다. 매 영상에서 실제 출력 오차를 측정하여 결정하는 방식은 아니다. 다중 GPU에서는 temporal attention을 재사용하는 step의 관련 sequence-parallel 통신도 함께 줄인다.
+
+**Method 근거:** [§2.3–2.4](https://arxiv.org/html/2408.12588v3#S2.SS3)
+
+#### ProfilingDiT
+
+- **효율화 위치:** **배경에 주로 attention을 주는 DiT block/연속 block 구간**.
+
+- **기존 계산 → 대체 방식:** 모든 block을 매번 계산하던 대신 선택한 배경 중심 block의 **출력 hidden state−입력 hidden state**를 저장해 현재 입력에 더한다. 연속된 block은 묶음의 입출력 차이를 저장하고 떨어진 block은 따로 저장하여 여러 구간을 건너뛴다. 전경 중심 block은 계속 계산한다. 영상의 배경 픽셀만 mask로 잘라 생략하는 방법이 아니라, **어느 block 전체를 재사용할지** 고르는 방법이다.
+
+- **판단 기준·학습/준비:** **Profiling + 재계산 일정.** 모델의 각 step noise prediction에서 채널 차원을 PCA로 3차원으로 줄여 RGB 같은 표현을 만든 뒤, 여기에 SAM2를 적용해 전경 mask를 얻는다. 높은 attention 값을 가진 token과 이 mask의 겹침을 프레임별로 분석·평균하여 전경 중심/배경 중심 block을 구분한다. 초기 warm-up은 실제 계산하고, 이후에는 step에 따라 정한 cache 간격으로 선택된 구간을 재계산한다. 핵심 선택 대상은 배경 픽셀이 아니라 배경에 주로 집중하는 신경망 block이다.
+
+**Method 근거:** [§3.2–3.3, Eqs. 6–15](https://arxiv.org/html/2504.03140v2#S3.SS2)
+
+### 1.7 생략한 feature를 과거 변화로 외삽
+
+**최근 실제 feature와 변화 이력 → 계산하지 않은 step의 feature tensor 예측.** 주된 차이는 스킵 판단용 작은 수치를 만드는 1.1과 달리, 생략한 신경망 출력 자체를 예측한다는 점이다. 기본 refresh는 예정된 주기를 따르며, FasterCache에는 CFG 분기 근사도 결합된다.
+
+| 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
+|---|---|---|---|---|---|
+| [ICLR'25](https://proceedings.iclr.cc/paper_files/paper/2025/file/518046d86bbc41a0707727c38301ad8e-Paper-Conference.pdf) **[FasterCache (2410)](https://arxiv.org/abs/2410.19355)** | O | X | X | attention 출력·CFG 무조건부 분기 | attention 출력 외삽 + 주파수 차이로 CFG 무조건부 예측 복원 |
+| [ICCV'25](https://openaccess.thecvf.com/content/ICCV2025/papers/Liu_From_Reusing_to_Forecasting_Accelerating_Diffusion_Models_with_TaylorSeers_ICCV_2025_paper.pdf) **[TaylorSeer (2503)](https://arxiv.org/abs/2503.06923)** | O | X | X | 선택한 층의 중간 feature | 과거 feature의 유한차분으로 Taylor 외삽 |
+| [ICLR'26](https://proceedings.iclr.cc/paper_files/paper/2026/hash/b67c77f8db8b991d73d6f2e16f491840-Abstract-Conference.html) **[HiCache (2508)](https://arxiv.org/abs/2508.16984)** | O | X | X | 중간 feature의 예측식 | Taylor 예측을 scaled Hermite 예측으로 교체 |
+
+#### FasterCache
+
+- **효율화 위치:** **Attention 출력 계산**과 **CFG의 unconditional denoiser branch**라는 서로 다른 두 위치.
+
+- **기존 계산 → 대체 방식:** Attention은 최근 두 번 실제 계산한 출력의 차분을 이용해 다음 출력을 **선형 외삽**한다. 단순 복사 대신 `최근 출력 + 가중된 이전 변화량`으로 대체하고 attention 외의 연산은 이어간다. CFG-Cache는 conditional·unconditional 최종 noise prediction에 FFT를 적용하여 두 출력의 **저주파 차이와 고주파 차이**를 저장한다. 생략 step에는 conditional branch만 실행하고, 그 주파수 성분에 저장된 두 차이를 각각 가중해 더한 뒤 역 FFT로 unconditional prediction을 복원하여 CFG를 계산한다.
+
+- **판단 기준·학습/준비:** **고정 refresh 주기와 timestep 가중치.** attention은 기본적으로 **실제 계산 step과 외삽 step을 번갈아 배치**하고, CFG 두 branch도 주기적으로 모두 계산해 주파수 차이를 갱신한다. denoising 진행 단계에 따라 저주파·고주파 보정 비중을 바꾸며, 매번 실제 오차를 알아내어 skip하는 방식은 아니다.
+
+**Method 근거:** [§2.4, Eqs. 4–8](https://arxiv.org/html/2410.19355v2#S2.SS4)
+
+#### TaylorSeer
+
+- **효율화 위치:** DiT **층별 중간 feature의 timestep 방향 변화**; attention/MLP 등 지정된 계산 지점.
+
+- **기존 계산 → 대체 방식:** 단순 cache는 이전 feature 값을 그대로 복사하지만, TaylorSeer는 실제 계산한 여러 anchor의 feature와 **1차·2차 이상 유한차분**을 함께 저장한다. 계산하지 않는 step의 feature를 `마지막 feature + 변화율×경과 step + 고차 변화항`으로 예측하여 해당 feature를 만드는 신경망 연산을 대체한다. 예측 대상은 픽셀 프레임이나 latent의 최종 샘플 자체가 아니라, 적용 지점의 중간 activation이다.
+
+- **판단 기준·학습/준비:** **주기적 실제 계산 + 온라인 차분 갱신.** N step마다 완전히 계산하고 차분 cache를 갱신하며, 중간 N−1 step은 Taylor 다항식으로 예측한다. step 간격으로 차분을 정규화하고, 예측 차수와 refresh 간격을 설정한다. 각 step의 실제 예측 오차를 관측해 refresh 여부를 고르는 기법은 아니다.
+
+**Method 근거:** [§3.1–3.2, Eqs. 4–10](https://arxiv.org/html/2503.06923v2#S3.SS1)
+
+#### HiCache
+
+- **효율화 위치:** Taylor-style cache-then-forecast의 **feature 예측식**; 기존 cache 적용 지점 유지.
+
+- **기존 계산 → 대체 방식:** TaylorSeer처럼 실제 계산한 feature와 고차 유한차분을 저장하지만, 예측식의 거듭제곱 항을 **scaled Hermite 다항식**으로 교체한다. 예측되는 것은 지정한 중간 feature의 다음 값이며, 새 attention matrix나 새 latent trajectory를 학습하는 방식이 아니다. 한 scale 값으로 예측 거리와 고차 항의 크기를 함께 축소해 긴 외삽에서 고차 항이 과도하게 커지는 문제를 줄인다.
+
+- **판단 기준·학습/준비:** **고정 간격 refresh + 온라인 차분 갱신.** 정해진 anchor step에서 full forward를 실행하고 feature 차분을 업데이트하며, 그 사이에는 Hermite 기반으로 예측한다. 예측 차수·간격·scale을 정해야 한다. 독립적인 online skip 판정기를 제시하기보다 기존 Taylor 예측기를 교체하는 방법이므로, 캐시 tensor의 정확한 층/모듈 경계는 결합한 framework에 따른다.
+
+**Method 근거:** [§3.2–3.3, Eq. 5 및 Algorithm 1](https://arxiv.org/html/2508.16984v2#S3.SS2)
 
 ## 2. 희소 어텐션·토큰별 계산 축소
 
@@ -400,6 +474,8 @@ flowchart TD
 
 **주로 줄이는 것: 전체 denoiser의 호출 횟수.** 이 계열은 실제 가속 위치가 공통된다. 차이는 적은 호출로도 좋은 영상을 만들도록 teacher의 어떤 정보를 배우고 consistency·reward·adversarial·DMD 목표를 어떻게 쓰는지에 있다. 학습 중 쓰는 reward model이나 discriminator가 추론에서도 실행되는 것은 아니다.
 
+**5번과의 차이:** 여기서는 적은 denoising 반복으로도 완성된 영상을 만들도록 학습한다. Teacher와 student의 신경망 크기가 같아도 가속될 수 있다. 5번의 pruning·양자화는 주로 한 번 호출할 때의 모델·연산 비용을 줄인다. 두 방식을 함께 적용할 수도 있다. [VideoLCM §3](https://arxiv.org/html/2312.09109#S3) · [VDMini §3](https://arxiv.org/html/2411.18375#S3)
+
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
 | (x) **[VideoLCM (2312)](https://arxiv.org/abs/2312.09109)** | X | O — 학습: diffusion teacher·EMA target | O | denoiser 호출 수·CFG 분기 | consistency 증류로 denoiser 호출 수·CFG 이중 평가 축소 |
@@ -473,6 +549,16 @@ flowchart TD
 
 **주로 바꾸는 것: 전체 clip을 함께 생성하는 절차를 현재 frame/chunk만 생성하는 절차로 전환.** Few-step 생성과 과거 문맥 KV 재사용이 함께 쓰인다. 과거 clean chunk의 KV를 유지하는 것과 현재 noisy chunk의 출력을 denoising step 사이에 재사용하는 것은 다르다. 첫 chunk가 나오는 지연시간, 최종 전체 영상 시간, 초당 처리량도 구분해야 한다.
 
+### 전체 clip 생성과 chunk별 생성의 차이
+
+- **일반적인 양방향 video diffusion:** 모든 frame의 noisy latent를 함께 넣고 전체 영상을 여러 denoising step에 걸쳐 다듬는다. 앞 frame도 뒤 frame의 정보에 의존하므로 앞부분만 먼저 확정하기 어렵다.
+- **자기회귀 video diffusion:** 첫 chunk를 noise에서 완성 → 완성된 과거 chunk의 문맥을 저장 → 그 문맥을 보며 다음 chunk를 noise에서 완성 → 반복한다. Chunk는 작은 frame 묶음이고, 각 chunk 안에서는 다시 denoising step을 수행한다.
+- **KV cache의 역할:** 완성된 과거 chunk의 attention key/value를 저장해 다음 chunk에서 다시 만들지 않는다. 현재 noisy chunk의 값이 조금 변한다고 과거 출력을 대신 넣는 1번의 step cache와 다른 재사용이다.
+- **스트리밍의 이점:** 첫 chunk가 끝나면 전체 영상이 끝나기 전에 표시할 수 있고, 생성 도중 들어온 조건을 다음 chunk에 반영할 수 있는 구조가 된다. 실제 제어 지원은 모델에 따라 다르며, 순차 생성 자체가 전체 생성 비용 감소를 자동으로 보장하지는 않는다.
+- **3번과의 관계:** 현재 chunk를 적은 denoising step으로 만드는 학습을 결합할 수 있다. CausVid의 4-step은 chunk마다 수행하는 denoising 횟수이며, 영상 전체의 forward가 네 번뿐이라는 뜻은 아니다. Self Forcing의 주된 학습 변경은 자신의 생성 history를 보고 다음 chunk를 만들도록 훈련하는 것이다.
+
+근거: [CausVid §4.4, Algorithm 2](https://arxiv.org/html/2412.07772#S4.SS4) · [Self Forcing §3.2–3.4](https://arxiv.org/html/2506.08009#S3)
+
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
 | [CVPR'25](https://openaccess.thecvf.com/content/CVPR2025/papers/Yin_From_Slow_Bidirectional_to_Fast_Autoregressive_Video_Diffusion_Models_CVPR_2025_paper.pdf) **[CausVid (2412)](https://arxiv.org/abs/2412.07772)** | X | O — 학습: teacher·fake-score | O | 현재 chunk denoiser·과거 KV | causal·소수 step 증류 + 완성된 chunk의 KV 재사용 |
@@ -523,6 +609,17 @@ flowchart TD
 ## 5. 양자화·모델 압축·통합 가속·시스템
 
 **한 가지 중복 제거 원리로 묶기 어려운 계열.** 양자화는 곱셈·메모리의 정밀도, pruning은 신경망 크기, autoencoder는 latent 크기와 복원 연산을 바꾼다. GPU 병렬화는 계산을 나눠 지연시간을 줄이는 방법이고, 통합 가속은 여러 기법을 결합한다. 따라서 아래 항목은 각각 어느 부품을 바꿨는지를 중심으로 읽는다.
+
+**이 절 자체도 여러 축의 묶음이다.** 아래처럼 구분하면 3번과의 차이가 더 명확하다.
+
+| 5번 내부 소분류 | 논문 | 무엇을 줄이거나 바꾸는가 |
+|---|---|---|
+| 저정밀 연산·양자화 | ViDiT-Q, QVD, SageAttention2, Q-VDiT | 반복 횟수보다 곱셈·저장·전송에 쓰는 비트 수와 양자화 오차 처리 |
+| 모델·latent 표현 축소 | VDMini, H3AE | 실행하는 블록/channel 또는 처리하는 latent 크기, VAE 복원 비용 |
+| 다중 GPU 실행 | xDiT | token·layer·CFG 분기의 배치와 통신 대기; latency 감소와 총 연산량 감소는 구분 |
+| 여러 가속 축의 통합 | TurboDiffusion | 3번 소수 step 증류와 2번 희소 attention, 저정밀 연산 등을 결합 |
+
+**학습 여부가 경계는 아니다.** 3번도 5번 일부도 학습하지만, 3번은 적은 반복으로 생성하는 능력을, VDMini 같은 5번 방법은 작은 신경망으로 같은 역할을 수행하는 능력을 학습한다. [VideoLCM](https://arxiv.org/html/2312.09109#S3) · [VDMini](https://arxiv.org/html/2411.18375#S3.SS2) · [TurboDiffusion](https://arxiv.org/html/2512.16093#S1)
 
 | 논문 | Training-free | 외부 모델 사용 | 비디오 모델 학습 | 효율화 위치 | 효율화 방법 |
 |---|---|---|---|---|---|
