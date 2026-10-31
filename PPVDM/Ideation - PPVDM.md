@@ -126,3 +126,114 @@ I2V 관련 쓸만해보이는 insights
 I2V object 관련 벤치마크
 - UI2V-Bench: object를 정확히 찾아서 모션을 부여해야 하는 벤치마크
 - Omit2V: 객체 수준 지시를 평가 (텍스트 프롬프트를 얼마나 잘 따르는가)
+
+
+
+
+
+## 0806
+
+- seed를 여러 개 돌리고 가장 모션이 비슷한 것들의 군집을 보고 거기에서 한 개를 뽑으면 이게 가장 plausible 하지 않을까?
+	- method: 
+	  1) confidence(ANSE 참고) & latent lev similarity(GEOPHYS 참고 또는 PCA)
+	  2) DisMo motion embedding
+	- 전제가 되는 idea: physically implausible 하면 모션의 variance가 매우 클 것임. 즉 implausible할수록 비슷한 motion이 모일 가능성이 낮아진다.
+	- seed를 고르는게 중요하다는건 Related work 에서 보일 수 있으므로 정당성 확보되지 않나?
+
+- + 추가적인 생각: 이걸 reward로 주고 강화학습을 돌리면 안좋은 seed여도 좋게 생성하는 능력이 생길 수도 있을까?
+	- metric: ~~seed들간의 variance~~ 다양한 시드로 실험 여러 번 돌렸을 때 벤치마크 점수 평균
+
+- 고려해야 할 점: VDM의 장점인 ‘다양성’은 해치지 않아야 할텐데…
+	- 예를 들어 접시가 깨지는 영상을 만든다고 하면 다양한 방향으로 깨져도 다 Plausible 하다고 봐야 하는데 이걸 비슷한 motion으로 감지할 수 있을까? 물론 완전히 이상한 영상은 구분할 수 있겠지만… 어떤건 깨지고 어떤건 안깨진다고 할 때 안깨지는 영상이 (또는 좀 적게 깨지는 영상이) 무조건 implausible 할까?
+	- DisMo가 이런거 잡아주지 않을까? 어찌 되었든 physically plausible하면 비슷한 동작이 나오는거잖아
+
+- instruction following 능력을 어떻게든 집어넣을 수는 없을까?
+	- 예를 들어 cross-attention 에서의 confidence?
+
+
+## 0821
+
+- 초반, 중반, 후반 레이어의 역할은 모든 denoising step 에서 동일할 것임.
+	- 어느 정도 퀄리티의 noise 가 input으로 주어졌느냐가 다르고 어쨌든 간에 마지막에는 velocity 를 내뱉음
+	- 그렇다면 아무 노이즈나 줘도 후반 레이어 태우면 visible한 정보가 나오지 않을까?
+
+생각해보니까 velocity가 바뀐다고 무조건 모션 정보가 들어 있는 것은 아닌데… 예를 들어 모션이 너무 confident 하면 velocity가 확 바뀔 이유가 없음
+
+
+temporal 한 디테일이 physically plausible prompt 의 가장 큰 요소인가?
+→ 만약 그렇다면 CFG를 temporal 하게 적용하는 등의 시도가 가능하다
+
+
+CFG good vs very good
+
+그냥 비디오 / 프레임 샘플링 최적 으로 줄 때 GPT vs Qwen
+→ 프롬프트를 잘 깎는지랑 실패 detect 잘 하는지
+
+## 0824
+### Insights
+- qwen vs GPT 실험: 전체적인 움직임이 이상한 것들은 둘 다 잘 detect 함. 공 속도가 자연스러운지 이상한지 (운동량 관련 추론)도 잘 함. 그런데 미세하거나 급격한 움직임의 경우에는 GPT도 잘 판별하지 못함. 
+	- Qwen: 공과 오리가 가만히 멈췄는데도 공이 계속 앞으로 간다고 함
+	- blur 처리, 공의 흰색 문양 등을 공의 형태가 바뀌거나 겹친걸로 오인함
+
+### To-Do
+- baseline vs 3-way CFG physics-IQ & videophy (gpt 사용) 스코어 뽑아서 비교
+	- 시간 남으면 수식 깎아보기
+- Adaptive Sampling 해줄 때 phy plau 잘 detect?: energy state가 높은 (부딪히는 순간) 부분은 구체적으로 주기, 대신 프레임 넘버 정보도 같이 줘야 안헷갈릴듯. energy state 가 낮은 부분은 띄엄띄엄 주기
+	- gt video 안주고 할 것
+	- energy state 높/낮: 직접 구간 정보를 주기
+## 0825
+
+LVLM Eval 결과: 물체의 물리학적 특성에 대한 이해도가 되게 많이 떨어짐.
+	- ex) 도미노에 대한 bias: “중간에 물체가 있어도 무조건 도미노는 다 쓰러져야 함”
+	- ex2) “고무 오리 쪽으로 도미노가 쓰러지면 오리는 무조건 조금이라도 움직여야 함” (무게와 마찰력에 대한 센스가 전혀 없음)
+	- ex3) 중간에 물체가 새로 생겨버려도 이게 implausible하다는걸 잘 detect 못함
+
+결국 인간의 지식을 어떻게든 distill 해줘야 할 것 같음.
+- LVLM 단독으로는 정확한 evaluation이 사실상 불가능한 느낌.
+	- physical rule에 대한 센스가 전혀 없어서 이 physical rule이 자연어로 주어진다고 한들 제대로 eval이 안될 것 같음
+	- 이상한 Bias들이 너무 많음
+- I2V 데이터셋을 기반으로, 가능할만한 물체 간 ‘상호작용’에 대한 캡션을 LVLM으로 최대한 많이 뽑고 인간이 걍 annotate 해서 데이터셋 만든 다음에 그거 바탕으로 LVLM이 생성된 영상에 리워드를 준다면? 그리고 그걸로 학습을 한다면 더 좋아질까?
+	- Motivation: ‘LVLM이 원인과 결과를 모두 예측하는건 부정확하나, likely한 상호작용 정도는 쉽게 뽑아낼 것이다’
+	- ex) 오리 도미노 샘플:
+	  1) LVLM이 ‘도미노가 넘어지고 오리와 부딪힌다’는 상호작용 캡션 뽑음
+	  2) 인간이 그 캡션 보고 말 되는거 아무거나 annotate - “도미노가 넘어져도 오리는 안움직인다”
+	  3) VDM이 생성한 영상을 평가할 때 LVLM은 2)를 보고 채점 + 강화학습
+### To-Do
+- 샘플링, 프롬프트 최적화 방법 찾아보고 고안해보기
+- 실패 영상도 캡셔닝 시켜볼 것
+- LVLM Crop tool 줘보기
+
+
+
+## 0826
+
+- GPT에 넣을 프롬프트 수정 방안
+	- object에 대한 묘사나 쓸데없는 디테일들을 포함하지 않도록 수정
+	- implausible 한 
+- physics가 틀린 부분을 잘 해결하도록 프롬프트를 agentic하게 깎는 방식 구축
+
+
+## 0831
+
+### To Do
+- PhyT2V 적용해서 프롬프트 여러 번 refine 하는 방식 해보기
+	- 이런 류의 연구들이 더 있는지 확인해보기
+- https://arxiv.org/pdf/2507.13428 PhyWorldBench 확인해보기
+
+### To Do
+- VLIPP 참고해서 T2V 세팅 → image generation 한 장 + I2V” 구현해보기
+	- videophy
+	- ~~phygenbench~~
+	- 구현하고 phyt2v 등등 해보기
+- 논문에서 사용된 벤치마크로 기존 메소드 reproducible 한지 확인
+- ~~videotpo 구현~~
+
+
+## 1007
+
+- 괜찮은 프레임들을 LVLM이 앞에서부터 고르는걸 추가?
+	- 보통 실수는 뒤쪽에서 심해지기 때문에 앞쪽부터 괜찮다고 판단이 되면 고정시키고 그걸 그냥 condition으로 줘버린다는 아이디어
+
+- 괜찮은 region을 LVLM이 고르는걸 추가?
+	- 이렇게 되면 LVLM->ROI 가 맞을까 ROI->LVLM이 맞을까
+

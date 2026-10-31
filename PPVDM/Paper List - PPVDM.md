@@ -14,6 +14,9 @@
 ~={orange}**NeurIPS’25-Spotlight**=~   [[DisMo]]   https://compvis.github.io/DisMo/static/dismo.pdf
 ~={orange}**ICLR’26**=~   [[Frame Guidance]]   https://arxiv.org/pdf/2506.07177
 
+## Self-Improving
+**~={orange}(Preprint)=~**   [[World Model Self-Distillation]]   https://arxiv.org/pdf/2606.12072v1
+
 ## 벤치마크
 ~={orange}**WACV’25**=~   [[Physics-IQ]]   https://arxiv.org/pdf/2501.09038
 **~={orange}ICLR’25=~**   [[VideoPhy]]   https://arxiv.org/pdf/2406.03520

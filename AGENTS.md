@@ -61,4 +61,4 @@ research_brain 디렉토리는 각종 논문의 내용을 정리하거나 ideati
 ### Github Repository 관련 지침
 - research_brain 폴더는 github에 연결된 Repository이다. 링크는 다음과 같다
   https://github.com/BluebackFrog/research_brain.git
-- 파일 또는 폴더가 수정될만한 작업을 하기 전에 pull 을 하는 등 동기화하고, 작업이 끝난 후에는 commit 및 push를 진행한다.ㄴ
+- 파일 또는 폴더가 수정될만한 작업을 하기 전에 pull 을 하는 등 동기화하고, 작업이 끝난 후에는 commit 및 push를 진행한다.

@@ -8,31 +8,31 @@
 - **연도 기준:** ‘최초 공개’는 arXiv v1 연도이며, 학회 발표 연도와 구분했다. ‘채택 미확인’은 확인한 1차 출처에서 채택 근거를 확보하지 못했다는 뜻이다.
 - **기호:** O = 해당함, X = 해당하지 않음, △ = 조건부·선택적 지원 또는 비교 범위가 다른 이력, — = 정책·범위 미확인 또는 해당 비교축 적용 대상 아님(본문에서 구분). 우리 방법은 구현 검증 결과가 아닌 설계안이다.
 
-| 논문 | 최초 공개 | 발표처·연도 | 공식 코드 | 메소드 재현 구성 | 공간 국소 수정 | 시간 선택 수정 | 누적 텍스트 이력 | 누적 시각 이력 | 시드 변경 | 초기 noise 변경 | Reference video 사용 |
-|---|:---:|---| :---: | :---: |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| **PhyT2V** | 2024 | CVPR 2025 | O | △ | X | X | — | — | X | X | X |
-| **VideoTPO / TiViBench** | 2025 | CVPR 2026 | O | O | X | X | X | X | X | X | X |
-| **VideoRepair** | 2024 | Findings of ACL 2026 | O | △ | O | X | — | — | △ | O | X |
-| GenMAC | 2024 | AAAI 2026 | O | O | X | X | X | X | X | X | X |
-| VISTA | 2025 | CVPR 2026 | X | X | X | X | X | X | — | — | X |
-| PQSG refinement | 2026 | ECCV 2026 | O | X | X | X | — | — | — | — | X |
-| MotionAgent · rethinking | 2025 | ICCV 2025 | O | O | X | X | — | — | X | X | X |
-| P-Flow | 2026 | CVPR 2026 | X | X | X | X | O | X | — | O | O |
-| CineCrew | 2026 | ECCV 2026 | O | △ | X | O | O | △ | △ | — | X |
-| NoisEasier | 2026 | ECCV 2026 | O | O | X | X | X | X | — | O | X |
-| FreeInit | 2023 | ECCV 2024 | O | O | X | X | X | X | X | O | X |
-| Self-Refining Video Sampling    | 2026  | ICML 2026             | O | O |    △     |    X     |     X     |    X     |   —   |      —      |         X          |
-| VideoGrain                      | 2025  | ICLR 2025             | O | O |    O     |    X     |     X     |    X     |   —   |      —      |         X          |
-| VideoAgent | 2024 | RLBRew @ RLC 2025 워크숍 | O | O | X | X | X | X | X | O | X |
-| Bootstrapping Physics-Grounded… | 2025 | ICCV 2025 워크숍 챌린지 보고 | X | X | X | X | — | — | — | — | O |
-| AIGVE-MACS refinement | 2025 | CVPR 2026 VGBE 워크숍 | △ | X | X | X | — | — | — | — | X |
-| **RAPO++** | 2025 | 채택 미확인 | O | △ | X | X | O | — | X | X | X |
-| NEWTON | 2026 | 채택 미확인 | O | △ | X | X | O | X | — | — | X |
-| SPIRAL | 2026 | 채택 미확인 | X | X | X | O | △ | △ | — | — | X |
-| CoAgent | 2025 | 채택 미확인 | X | X | X | O | △ | △ | — | — | X |
-| A²RD · 기본형 | 2026 | 채택 미확인 | X | X | X | O | △ | △ | — | — | X |
-| VQQA | 2026 | 채택 미확인 | X | X | X | X | △ | X | O | O | X |
-| **우리 방법 · 설계안** | — | — | — | — | O | O | O | O | — | — | X |
+| 논문                              | 최초 공개 | 발표처·연도                | 공식 코드 | 메소드 재현 구성 | 공간 국소 수정 | 시간 선택 수정 | 누적 텍스트 이력 | 누적 시각 이력 | 시드 변경 | 초기 noise 변경 | Reference video 사용 |
+| ------------------------------- | :---: | --------------------- | :---: | :-------: | :------: | :------: | :-------: | :------: | :---: | :---------: | :----------------: |
+| **PhyT2V**                      | 2024  | CVPR 2025             |   O   |     △     |    X     |    X     |     —     |    —     |   X   |      X      |         X          |
+| **VideoTPO / TiViBench**        | 2025  | CVPR 2026             |   O   |     O     |    X     |    X     |     X     |    X     |   X   |      X      |         X          |
+| **VideoRepair**                 | 2024  | Findings of ACL 2026  |   O   |     △     |    O     |    X     |     —     |    —     |   △   |      O      |         X          |
+| GenMAC                          | 2024  | AAAI 2026             |   O   |     O     |    X     |    X     |     X     |    X     |   X   |      X      |         X          |
+| VISTA                           | 2025  | CVPR 2026             |   X   |     X     |    X     |    X     |     X     |    X     |   —   |      —      |         X          |
+| PQSG refinement                 | 2026  | ECCV 2026             |   O   |     X     |    X     |    X     |     —     |    —     |   —   |      —      |         X          |
+| MotionAgent · rethinking        | 2025  | ICCV 2025             |   O   |     O     |    X     |    X     |     —     |    —     |   X   |      X      |         X          |
+| P-Flow                          | 2026  | CVPR 2026             |   X   |     X     |    X     |    X     |     O     |    X     |   —   |      O      |         O          |
+| CineCrew                        | 2026  | ECCV 2026             |   O   |     △     |    X     |    O     |     O     |    △     |   △   |      —      |         X          |
+| NoisEasier                      | 2026  | ECCV 2026             |   O   |     O     |    X     |    X     |     X     |    X     |   —   |      O      |         X          |
+| FreeInit                        | 2023  | ECCV 2024             |   O   |     O     |    X     |    X     |     X     |    X     |   X   |      O      |         X          |
+| Self-Refining Video Sampling    | 2026  | ICML 2026             |   O   |     O     |    △     |    X     |     X     |    X     |   —   |      —      |         X          |
+| VideoGrain                      | 2025  | ICLR 2025             |   O   |     O     |    O     |    X     |     X     |    X     |   —   |      —      |         X          |
+| VideoAgent                      | 2024  | RLBRew @ RLC 2025 워크숍 |   O   |     O     |    X     |    X     |     X     |    X     |   X   |      O      |         X          |
+| Bootstrapping Physics-Grounded… | 2025  | ICCV 2025 워크숍 챌린지 보고  |   X   |     X     |    X     |    X     |     —     |    —     |   —   |      —      |         O          |
+| AIGVE-MACS refinement           | 2025  | CVPR 2026 VGBE 워크숍    |   △   |     X     |    X     |    X     |     —     |    —     |   —   |      —      |         X          |
+| **RAPO++**                      | 2025  | 채택 미확인                |   O   |     △     |    X     |    X     |     O     |    —     |   X   |      X      |         X          |
+| NEWTON                          | 2026  | 채택 미확인                |   O   |     △     |    X     |    X     |     O     |    X     |   —   |      —      |         X          |
+| SPIRAL                          | 2026  | 채택 미확인                |   X   |     X     |    X     |    O     |     △     |    △     |   —   |      —      |         X          |
+| CoAgent                         | 2025  | 채택 미확인                |   X   |     X     |    X     |    O     |     △     |    △     |   —   |      —      |         X          |
+| A²RD · 기본형                      | 2026  | 채택 미확인                |   X   |     X     |    X     |    O     |     △     |    △     |   —   |      —      |         X          |
+| VQQA                            | 2026  | 채택 미확인                |   X   |     X     |    X     |    X     |     △     |    X     |   O   |      O      |         X          |
+| **우리 방법 · 설계안**                 |   —   | —                     |   —   |     —     |    O     |    O     |     O     |    O     |   —   |      —      |         X          |
 
 - **공식 코드:** O = 방법 또는 평가기의 실제 소스 공개, △ = 추론 예제 등 제한적인 코드만 공개, X = 확인일 기준 공식 방법 소스가 없거나 GitHub 재검색에서도 공개된 공식 구현을 찾지 못함. — = 점검 대상 아님(우리 설계안). README·소개 영상·checkpoint만 있다는 이유로 O를 주지 않는다.
 - **메소드 재현 구성:** O = 본문에 명시한 backbone·변형에서 핵심 refinement 로직, 실행 진입점, 설정·의존성·필요 모델/입력의 준비 안내를 확인함. △ = 일부 구현은 있으나 필수 단계·실행 파일·서버 구성 누락, 알려진 실행 오류 또는 논문 방법과의 차이를 보완해야 함. X = 비교 대상 refinement 구현이 공개되지 않았거나 공개 구현을 찾지 못함. — = 점검 대상 아님(우리 설계안).
@@ -94,6 +94,9 @@
 - **비교 포인트:** 영상 점수가 0이면 전체 재생성, 1이면 중단하는 분기가 이미 있다. 우리 방법과는 **프레임별 ROI 타당성 검증으로 region/whole-frame을 선택한다**는 판단 기준을 비교해야 한다.
 - **공식 코드·재현 구성:** O / △. benchmark용 평가→mask→국소 재생성·ranking과 noise/denoising 혼합은 공개됐다. **자유 prompt용 demo·질문 생성은 미공개 TODO**이며 README의 `main_iter_demo.py`도 없다(공개 실행 경로는 `run.sh`→`main.py`). [공개 loop](https://github.com/daeunni/VideoRepair/blob/a0a261f55e771403de44accded15c7c5eb0b1370/main.py#L144-L314) · [미공개 항목](https://github.com/daeunni/VideoRepair/blob/a0a261f55e771403de44accded15c7c5eb0b1370/README.md#L117-L120).
 - **근거:** [§2.1–2.3, Appendix E.1](https://aclanthology.org/2026.findings-acl.1817.pdf). 전역 재생성·중단 분기는 §2.1.
+- 메모
+	- 첫 비디오 생성할 때 다양한 시드로 여러 개 생성하여 Score 제일 높은 비디오를 고른다
+	- diffusion 스텝마다 서로 다르게 생성한 영역을 seamlessly blend 한 뒤에 다음 스텝으로 넘어가는 방식으로 섞음
 
 ### GenMAC
 
@@ -154,6 +157,11 @@
 - **비교 포인트:** 텍스트와 시각 history의 보존 범위를 명시적으로 나눈 직접 비교군이다. 우리 설계는 ROI가 표시된 과거 프레임을 어떻게 선택·활용하는지, 그 이력이 수정 범위 결정에 어떤 역할을 하는지 대비할 수 있다.
 - **공식 코드·재현 구성:** X / X. [공식 저장소](https://github.com/showlab/P-Flow/blob/d441ae2dc895afeb820530b07c1ae5eb730e5e99/README.md#L20-L22)는 존재하지만 확인 시점에는 README만 있고 코드 공개 예정이라고 명시되어 있다. prompt 최적화·noise prior·생성 실행 코드는 제공되지 않는다.
 - **근거:** [§3.3–3.5, Appendix A.1 Algorithm 1](https://arxiv.org/html/2603.22091v1), [공식 supplement](https://openaccess.thecvf.com/content/CVPR2026/supplemental/Zhao_P-Flow_Prompting_Visual_CVPR_2026_supplemental.pdf).
+- 메모
+	- reference video 필요: flow matching inversion으로 initial latent noise 를 추정한 뒤에 SVD로 appearance 관련 정보를 빼고 주요 temporal 정보 (motion)만 남겨서 유리한 initial latent noise 사용
+	- history 들어가는데, 이 때 visual data history는 ref video, previous video, generated video 만 들어간다. 대신 프롬프트랑 VLM analysis 는 모든게 다 들어감
+	- Gemini 1.5 Pro 사용
+
 
 ### CineCrew
 
@@ -204,7 +212,8 @@
 - **비교 포인트:** 자체 예측의 불안정성으로 수정 위치를 정하는 방법. 우리 설계의 완성 영상 간 ROI 계산·VLM 판단과 비교할 때 **보정 시점과 판단 신호**를 구분해야 한다.
 - **공식 코드·재현 구성:** O / O(**Wan T2V/I2V 구현 기준**). [P&P와 uncertainty mask 실제 구현](https://github.com/agwmon/self-refine-video/blob/271be8d1cbc8ca38e48263b46b9568b74ca023aa/functions/pipeline_wan_pnp.py#L637-L741), [실행·모델·환경 안내](https://github.com/agwmon/self-refine-video/blob/271be8d1cbc8ca38e48263b46b9568b74ca023aa/README.md#L33-L48)가 있다. 다만 [T2V demo의 threshold 0.2](https://github.com/agwmon/self-refine-video/blob/271be8d1cbc8ca38e48263b46b9568b74ca023aa/inference_pnp.py#L35-L46)는 [논문 Table 6의 0.25](https://arxiv.org/html/2601.18577v1#A1.SS2)와 달라, 논문 실험 재현 시 설정을 맞춰야 한다.
 - **근거:** [§4.2–4.3, Algorithm 1](https://arxiv.org/html/2601.18577v1#S4.SS2), [공식 프로젝트](https://agwmon.github.io/self-refine-video/).
-
+- 메모
+	- P&P의 목적: 학습된 영상 분포의 더 그럴듯한 영역으로 유도해 움직임의 일관성과 물리적 타당성을 개선. 단순히 랜덤하게 몇 번 반복하는건 아님.
 ### VideoGrain
 
 - **발표:** 최초 공개 **2025** → **ICLR 2025 본회의**. *VideoGrain: Modulating Space-Time Attention for Multi-Grained Video Editing*. [arXiv 이력](https://arxiv.org/abs/2502.17258), [공식 proceedings](https://proceedings.iclr.cc/paper_files/paper/2025/hash/4bfcebedf7a2967c410b64670f27f904-Abstract-Conference.html).
